@@ -1,0 +1,16 @@
+export const PORTFOLIO_HOLDINGS = [
+    { ticker: 'ABT', name: 'Abbott Laboratories', shares: 600, sector: 'Health Care' },
+    { ticker: 'AMZN', name: 'Amazon.com Inc.', shares: 300, sector: 'Consumer Discretionary' },
+    { ticker: 'CVS', name: 'CVS Health Corp', shares: 1325, sector: 'Health Care' },
+    { ticker: 'DLR', name: 'Digital Realty Trust', shares: 400, sector: 'Real Estate' },
+    { ticker: 'DOC', name: 'Healthpeak Properties', shares: 2000, sector: 'Real Estate' },
+    { ticker: 'LMT', name: 'Lockheed Martin', shares: 125, sector: 'Industrials' },
+    { ticker: 'MO', name: 'Altria Group', shares: 800, sector: 'Consumer Staples' },
+    { ticker: 'NESN', name: 'Nestlé S.A.', shares: 750, sector: 'Consumer Staples', currency: 'CHF' },
+    { ticker: 'NOVN', name: 'Novartis AG', shares: 700, sector: 'Health Care', currency: 'CHF' },
+    { ticker: 'PEP', name: 'PepsiCo Inc.', shares: 1000, sector: 'Consumer Staples' },
+    { ticker: 'SAP', name: 'SAP SE', shares: 360, sector: 'Technology', currency: 'EUR' },
+    { ticker: 'SHEL', name: 'Shell PLC', shares: 1585, sector: 'Energy', currency: 'EUR' },
+    { ticker: 'SIE', name: 'Siemens AG', shares: 500, sector: 'Industrials', currency: 'EUR' },
+    { ticker: 'UNH', name: 'UnitedHealth Group', shares: 160, sector: 'Health Care' },
+];

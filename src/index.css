@@ -61,6 +61,84 @@ body {
   overflow-y: auto;
 }
 
+/* Bottom nav (mobile only) */
+.bottom-nav {
+  display: none;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .app-container {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .main-content {
+    padding: 1.25rem 1rem;
+    padding-bottom: 80px;
+  }
+
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    background: rgba(15, 23, 42, 0.97);
+    backdrop-filter: blur(16px);
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    z-index: 100;
+    align-items: stretch;
+  }
+
+  .bottom-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 0.65rem;
+    font-family: var(--font-main);
+    transition: color 0.2s;
+    padding: 0;
+  }
+
+  .bottom-nav-item.active {
+    color: var(--accent-color);
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+    margin-top: 1rem;
+  }
+
+  .simulator-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .login-card {
+    margin: 1rem;
+    padding: 2rem 1.5rem;
+  }
+
+  table {
+    font-size: 0.8rem;
+  }
+
+  th, td {
+    padding: 0.6rem 0.5rem;
+  }
+}
+
 /* Typography */
 h1, h2, h3 {
   margin: 0;

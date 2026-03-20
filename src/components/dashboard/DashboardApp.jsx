@@ -58,6 +58,20 @@ export default function DashboardApp() {
 
     return (
         <div className="app-container">
+            {/* Bottom nav — mobile only */}
+            <nav className="bottom-nav">
+                {navItems.map(item => (
+                    <button
+                        key={item.id}
+                        className={`bottom-nav-item${activeTab === item.id ? ' active' : ''}`}
+                        onClick={() => setActiveTab(item.id)}
+                    >
+                        <item.icon size={22} />
+                        <span>{item.label}</span>
+                    </button>
+                ))}
+            </nav>
+
             <aside className="sidebar glass-panel" style={{ borderRadius: 0, borderTop: 0, borderBottom: 0, height: '100vh', position: 'sticky', top: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem' }}>
                     <TrendingUp size={32} color="var(--accent-color)" />

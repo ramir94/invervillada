@@ -59,7 +59,8 @@ export default function Simulator({ holdings, marketData }) {
                 <p style={{ color: 'var(--text-secondary)' }}>Stress test your wealth composition against hypothetical market events.</p>
             </header>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '2rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'clamp(1fr, 1fr, 1fr) 350px', gap: '2rem' }}
+                 className="simulator-grid">
                 <div className="glass-panel" style={{ padding: '2rem' }}>
                     <h3>Select a Scenario</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginTop: '1.5rem' }}>

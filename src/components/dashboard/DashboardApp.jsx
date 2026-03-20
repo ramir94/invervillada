@@ -1,16 +1,18 @@
 import { useState, useEffect } from 'react'
-import { LayoutDashboard, PieChart, BrainCircuit, ShieldAlert, TrendingUp, LogOut } from 'lucide-react'
+import { LayoutDashboard, PieChart, BrainCircuit, ShieldAlert, TrendingUp, LogOut, ArrowLeftRight } from 'lucide-react'
 import Dashboard from './Dashboard'
 import PortfolioTable from './PortfolioTable'
 import AIAnalysis from './AIAnalysis'
 import Simulator from './Simulator'
+import Operations from './Operations'
 import { getMarketData } from '../../services/marketData'
-import { PORTFOLIO_HOLDINGS } from '../../data/portfolio'
+import { getOperations, buildHoldingsFromOperations } from '../../services/operations'
 import { useAuth } from '../../contexts/AuthContext'
 
 const navItems = [
     { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
     { id: 'portfolio', label: 'Holdings', icon: PieChart },
+    { id: 'operations', label: 'Operaciones', icon: ArrowLeftRight },
     { id: 'analysis', label: 'AI Analyst', icon: BrainCircuit },
     { id: 'simulator', label: 'Stress Test', icon: ShieldAlert },
 ]
@@ -19,11 +21,13 @@ export default function DashboardApp() {
     const { session, signOut } = useAuth()
     const [activeTab, setActiveTab] = useState('dashboard')
     const [marketData, setMarketData] = useState(null)
+    const [operations, setOperations] = useState([])
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        getMarketData().then(data => {
-            setMarketData(data)
+        Promise.all([getMarketData(), getOperations()]).then(([market, ops]) => {
+            setMarketData(market)
+            setOperations(ops)
             setLoading(false)
         })
 
@@ -34,10 +38,20 @@ export default function DashboardApp() {
         return () => clearInterval(interval)
     }, [])
 
+    const holdings = buildHoldingsFromOperations(operations)
+
+    const handleOperationAdded = (op) => {
+        setOperations(prev => [op, ...prev])
+    }
+
+    const handleOperationDeleted = (id) => {
+        setOperations(prev => prev.filter(op => op.id !== id))
+    }
+
     if (loading) {
         return (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: 'var(--text-secondary)' }}>
-                Cargando datos de mercado...
+                Cargando datos...
             </div>
         )
     }
@@ -79,8 +93,8 @@ export default function DashboardApp() {
 
                 <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px' }}>
-                        <small style={{ color: 'var(--text-secondary)' }}>Portfolio Strategy</small>
-                        <div style={{ fontWeight: '600', color: 'var(--success)' }}>Conservative Growth</div>
+                        <small style={{ color: 'var(--text-secondary)' }}>Holdings activos</small>
+                        <div style={{ fontWeight: '600', color: 'var(--accent-color)' }}>{holdings.length} posiciones</div>
                     </div>
 
                     <div style={{ padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px' }}>
@@ -112,10 +126,17 @@ export default function DashboardApp() {
             </aside>
 
             <main className="main-content">
-                {activeTab === 'dashboard' && <Dashboard holdings={PORTFOLIO_HOLDINGS} marketData={marketData} />}
-                {activeTab === 'portfolio' && <PortfolioTable holdings={PORTFOLIO_HOLDINGS} marketData={marketData} />}
-                {activeTab === 'analysis' && <AIAnalysis holdings={PORTFOLIO_HOLDINGS} marketData={marketData} />}
-                {activeTab === 'simulator' && <Simulator holdings={PORTFOLIO_HOLDINGS} marketData={marketData} />}
+                {activeTab === 'dashboard' && <Dashboard holdings={holdings} marketData={marketData} />}
+                {activeTab === 'portfolio' && <PortfolioTable holdings={holdings} marketData={marketData} />}
+                {activeTab === 'operations' && (
+                    <Operations
+                        operations={operations}
+                        onOperationAdded={handleOperationAdded}
+                        onOperationDeleted={handleOperationDeleted}
+                    />
+                )}
+                {activeTab === 'analysis' && <AIAnalysis holdings={holdings} marketData={marketData} />}
+                {activeTab === 'simulator' && <Simulator holdings={holdings} marketData={marketData} />}
             </main>
         </div>
     )

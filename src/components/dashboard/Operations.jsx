@@ -1,18 +1,13 @@
-import { useState } from 'react'
-import { PlusCircle, Trash2, TrendingUp, TrendingDown } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { PlusCircle, Trash2, TrendingUp, TrendingDown, Search } from 'lucide-react'
 import { addOperation, deleteOperation } from '../../services/operations'
+import { searchStocks, STOCK_MAP } from '../../data/stockCatalog'
 import { formatCurrency } from '../../utils/formatting'
-
-const SECTORS = [
-    'Health Care', 'Technology', 'Consumer Staples', 'Consumer Discretionary',
-    'Industrials', 'Real Estate', 'Energy', 'Financials', 'Materials',
-    'Communication Services', 'Utilities', 'Other'
-]
 
 const emptyForm = {
     ticker: '',
     company_name: '',
-    sector: 'Other',
+    sector: '',
     type: 'buy',
     shares: '',
     price: '',
@@ -22,9 +17,45 @@ const emptyForm = {
 
 export default function Operations({ operations, onOperationAdded, onOperationDeleted }) {
     const [form, setForm] = useState(emptyForm)
+    const [tickerQuery, setTickerQuery] = useState('')
+    const [suggestions, setSuggestions] = useState([])
+    const [stockSelected, setStockSelected] = useState(false)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState(null)
     const [showForm, setShowForm] = useState(false)
+    const suggestionsRef = useRef(null)
+
+    // Cerrar sugerencias al click fuera
+    useEffect(() => {
+        const handleClick = (e) => {
+            if (suggestionsRef.current && !suggestionsRef.current.contains(e.target)) {
+                setSuggestions([])
+            }
+        }
+        document.addEventListener('mousedown', handleClick)
+        return () => document.removeEventListener('mousedown', handleClick)
+    }, [])
+
+    const handleTickerInput = (e) => {
+        const val = e.target.value.toUpperCase()
+        setTickerQuery(val)
+        setStockSelected(false)
+        setForm(prev => ({ ...prev, ticker: val, company_name: '', sector: '', currency: 'USD' }))
+        setSuggestions(val.length >= 1 ? searchStocks(val) : [])
+    }
+
+    const selectStock = (stock) => {
+        setTickerQuery(stock.ticker)
+        setForm(prev => ({
+            ...prev,
+            ticker: stock.ticker,
+            company_name: stock.name,
+            sector: stock.sector,
+            currency: stock.currency,
+        }))
+        setStockSelected(true)
+        setSuggestions([])
+    }
 
     const handleChange = (e) => {
         setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
@@ -32,6 +63,10 @@ export default function Operations({ operations, onOperationAdded, onOperationDe
 
     const handleSubmit = async (e) => {
         e.preventDefault()
+        if (!stockSelected) {
+            setError('Selecciona una acción del desplegable.')
+            return
+        }
         setError(null)
         setLoading(true)
         try {
@@ -42,6 +77,8 @@ export default function Operations({ operations, onOperationAdded, onOperationDe
             })
             onOperationAdded(op)
             setForm(emptyForm)
+            setTickerQuery('')
+            setStockSelected(false)
             setShowForm(false)
         } catch (err) {
             setError(err.message)
@@ -57,6 +94,15 @@ export default function Operations({ operations, onOperationAdded, onOperationDe
         } catch (err) {
             setError(err.message)
         }
+    }
+
+    const resetForm = () => {
+        setShowForm(false)
+        setForm(emptyForm)
+        setTickerQuery('')
+        setStockSelected(false)
+        setError(null)
+        setSuggestions([])
     }
 
     return (
@@ -83,6 +129,7 @@ export default function Operations({ operations, onOperationAdded, onOperationDe
                 <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
                     <h3 style={{ marginBottom: '1.5rem' }}>Registrar operación</h3>
                     <form onSubmit={handleSubmit}>
+
                         {/* Buy / Sell toggle */}
                         <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' }}>
                             {['buy', 'sell'].map(t => (
@@ -116,56 +163,105 @@ export default function Operations({ operations, onOperationAdded, onOperationDe
                         </div>
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Ticker *</label>
+
+                            {/* Ticker autocomplete */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', position: 'relative' }} ref={suggestionsRef}>
+                                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                    <Search size={13} /> Ticker *
+                                </label>
                                 <input
                                     className="login-input"
-                                    name="ticker"
-                                    placeholder="AAPL"
-                                    value={form.ticker}
-                                    onChange={handleChange}
+                                    placeholder="Escribe ticker o empresa..."
+                                    value={tickerQuery}
+                                    onChange={handleTickerInput}
                                     required
-                                    style={{ textTransform: 'uppercase' }}
+                                    autoComplete="off"
                                 />
+                                {suggestions.length > 0 && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        top: '100%',
+                                        left: 0, right: 0,
+                                        marginTop: '4px',
+                                        background: '#1e293b',
+                                        border: '1px solid rgba(255,255,255,0.1)',
+                                        borderRadius: '8px',
+                                        overflow: 'hidden',
+                                        zIndex: 100,
+                                        boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
+                                    }}>
+                                        {suggestions.map(s => (
+                                            <div
+                                                key={s.ticker}
+                                                onClick={() => selectStock(s)}
+                                                style={{
+                                                    padding: '0.75rem 1rem',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    transition: 'background 0.15s',
+                                                    borderBottom: '1px solid rgba(255,255,255,0.04)'
+                                                }}
+                                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(56,189,248,0.1)'}
+                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                            >
+                                                <div>
+                                                    <span style={{ fontWeight: '700', color: 'var(--accent-color)', marginRight: '0.75rem' }}>{s.ticker}</span>
+                                                    <span style={{ color: 'var(--text-primary)', fontSize: '0.9rem' }}>{s.name}</span>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{s.sector}</span>
+                                                    <span style={{
+                                                        fontSize: '0.75rem',
+                                                        background: 'rgba(255,255,255,0.07)',
+                                                        padding: '0.1rem 0.4rem',
+                                                        borderRadius: '4px',
+                                                        color: 'var(--text-secondary)'
+                                                    }}>{s.currency}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
+
+                            {/* Empresa (read-only) */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Empresa *</label>
+                                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Empresa</label>
                                 <input
                                     className="login-input"
-                                    name="company_name"
-                                    placeholder="Apple Inc."
                                     value={form.company_name}
-                                    onChange={handleChange}
-                                    required
+                                    readOnly
+                                    placeholder="Se rellena al seleccionar ticker"
+                                    style={{ opacity: stockSelected ? 1 : 0.5, cursor: 'default' }}
                                 />
                             </div>
+
+                            {/* Sector (read-only) */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Sector *</label>
-                                <select
+                                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Sector</label>
+                                <input
                                     className="login-input"
-                                    name="sector"
                                     value={form.sector}
-                                    onChange={handleChange}
-                                    style={{ cursor: 'pointer' }}
-                                >
-                                    {SECTORS.map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
+                                    readOnly
+                                    placeholder="Se rellena al seleccionar ticker"
+                                    style={{ opacity: stockSelected ? 1 : 0.5, cursor: 'default' }}
+                                />
                             </div>
+
+                            {/* Divisa (read-only) */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Divisa *</label>
-                                <select
+                                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Divisa</label>
+                                <input
                                     className="login-input"
-                                    name="currency"
                                     value={form.currency}
-                                    onChange={handleChange}
-                                    style={{ cursor: 'pointer' }}
-                                >
-                                    <option value="USD">USD</option>
-                                    <option value="EUR">EUR</option>
-                                    <option value="CHF">CHF</option>
-                                    <option value="GBP">GBP</option>
-                                </select>
+                                    readOnly
+                                    style={{ opacity: stockSelected ? 1 : 0.5, cursor: 'default' }}
+                                />
                             </div>
+
+                            {/* Acciones */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                                 <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Acciones *</label>
                                 <input
@@ -180,6 +276,8 @@ export default function Operations({ operations, onOperationAdded, onOperationDe
                                     required
                                 />
                             </div>
+
+                            {/* Precio */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                                 <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Precio por acción *</label>
                                 <input
@@ -194,7 +292,9 @@ export default function Operations({ operations, onOperationAdded, onOperationDe
                                     required
                                 />
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', gridColumn: '1 / -1' }}>
+
+                            {/* Fecha */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                                 <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Fecha *</label>
                                 <input
                                     className="login-input"
@@ -203,9 +303,26 @@ export default function Operations({ operations, onOperationAdded, onOperationDe
                                     value={form.date}
                                     onChange={handleChange}
                                     required
-                                    style={{ maxWidth: '200px' }}
                                 />
                             </div>
+
+                            {/* Total estimado */}
+                            {form.shares && form.price && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', justifyContent: 'flex-end' }}>
+                                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Total estimado</label>
+                                    <div style={{
+                                        padding: '0.85rem 1rem',
+                                        borderRadius: '8px',
+                                        background: form.type === 'buy' ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+                                        border: `1px solid ${form.type === 'buy' ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
+                                        fontWeight: '700',
+                                        fontSize: '1.1rem',
+                                        color: form.type === 'buy' ? 'var(--success)' : 'var(--danger)'
+                                    }}>
+                                        {form.type === 'buy' ? '+' : '-'}{formatCurrency(form.shares * form.price, form.currency)}
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {error && (
@@ -221,12 +338,12 @@ export default function Operations({ operations, onOperationAdded, onOperationDe
                         )}
 
                         <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
-                            <button type="submit" className="btn" disabled={loading}>
+                            <button type="submit" className="btn" disabled={loading || !stockSelected}>
                                 {loading ? 'Guardando...' : 'Guardar operación'}
                             </button>
                             <button
                                 type="button"
-                                onClick={() => { setShowForm(false); setForm(emptyForm); setError(null) }}
+                                onClick={resetForm}
                                 style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-secondary)', padding: '0.75rem 1.5rem', borderRadius: '8px', cursor: 'pointer' }}
                             >
                                 Cancelar

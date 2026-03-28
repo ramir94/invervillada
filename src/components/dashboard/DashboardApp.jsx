@@ -27,24 +27,41 @@ export default function DashboardApp() {
     const [snapshots, setSnapshots] = useState([])
     const [loading, setLoading] = useState(true)
 
+    // Carga inicial: primero operaciones y snapshots, luego market data para los tickers del usuario
     useEffect(() => {
-        Promise.all([getMarketData(), getOperations(), getSnapshots()]).then(([market, ops, snaps]) => {
-            setMarketData(market)
+        const init = async () => {
+            const [ops, snaps] = await Promise.all([getOperations(), getSnapshots()])
             setOperations(ops)
             setSnapshots(snaps)
+
+            const tickers = [...new Set(ops.map(op => op.ticker))]
+            if (tickers.length > 0) {
+                const market = await getMarketData(tickers)
+                setMarketData(market)
+            }
             setLoading(false)
-        })
-
-        const interval = setInterval(() => {
-            getMarketData().then(data => setMarketData(data))
-        }, 30000)
-
-        return () => clearInterval(interval)
+        }
+        init()
     }, [])
 
-    const holdings = useMemo(() => buildHoldingsFromOperations(operations), [operations])
+    // Lista de tickers únicos actuales — cambia cuando el usuario añade/elimina operaciones
+    const tickerList = useMemo(
+        () => [...new Set(operations.map(op => op.ticker))],
+        [operations]
+    )
 
-    // Capa de analytics: precio medio, P&L real, pesos, concentración, alertas, health score
+    // Refrescar precios cada 30 segundos para los tickers en cartera
+    useEffect(() => {
+        if (!tickerList.length) return
+        const interval = setInterval(() => {
+            getMarketData(tickerList).then(data => {
+                if (Object.keys(data).length > 0) setMarketData(data)
+            })
+        }, 30000)
+        return () => clearInterval(interval)
+    }, [tickerList])
+
+    const holdings = useMemo(() => buildHoldingsFromOperations(operations), [operations])
     const costBasis = useMemo(() => calculateCostBasis(operations), [operations])
 
     const analytics = useMemo(
@@ -62,27 +79,31 @@ export default function DashboardApp() {
         [snapshots, analytics]
     )
 
-    // Guardar snapshot del día actual una vez que tenemos el valor del portfolio
+    // Guardar snapshot del día actual
     useEffect(() => {
         if (!analytics || analytics.totalValue <= 0) return
         saveSnapshot(analytics.totalValue).then(saved => {
             if (!saved) return
-            // Actualizar snapshots locales si el guardado fue exitoso
             setSnapshots(prev => {
                 const today = new Date().toISOString().split('T')[0]
                 const without = prev.filter(s => s.snapshot_date !== today)
                 return [{ snapshot_date: today, total_value: analytics.totalValue }, ...without]
             })
-        }).catch(() => {
-            // Silenciar errores de snapshot — no bloquear la UI
-        })
-    }, [analytics?.totalValue]) // Solo re-ejecutar si cambia el valor total
+        }).catch(() => { /* silenciar errores de snapshot */ })
+    }, [analytics?.totalValue])
 
     const highAlertCount = analytics?.alerts.filter(a => a.severity === 'high').length ?? 0
     const totalAlertCount = analytics?.alerts.length ?? 0
 
-    const handleOperationAdded = (op) => {
+    const handleOperationAdded = async (op) => {
         setOperations(prev => [op, ...prev])
+        // Si es un ticker nuevo, obtener su precio inmediatamente
+        if (!marketData || !marketData[op.ticker]) {
+            const newData = await getMarketData([op.ticker])
+            if (Object.keys(newData).length > 0) {
+                setMarketData(prev => ({ ...(prev ?? {}), ...newData }))
+            }
+        }
     }
 
     const handleOperationDeleted = (id) => {
@@ -153,7 +174,6 @@ export default function DashboardApp() {
                         >
                             <item.icon size={20} />
                             {item.label}
-                            {/* Indicador de alertas en el sidebar */}
                             {item.id === 'dashboard' && highAlertCount > 0 && (
                                 <span style={{
                                     marginLeft: 'auto',
@@ -172,7 +192,6 @@ export default function DashboardApp() {
                 </nav>
 
                 <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {/* Health Score en sidebar */}
                     {analytics && (
                         <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px' }}>
                             <small style={{ color: 'var(--text-secondary)', display: 'block', marginBottom: '0.4rem' }}>Health Score</small>

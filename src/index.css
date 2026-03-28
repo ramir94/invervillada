@@ -137,6 +137,29 @@ body {
   th, td {
     padding: 0.6rem 0.5rem;
   }
+
+  /* Benchmark widget — reducir fuente en pantallas pequeñas */
+  .benchmark-row-label {
+    font-size: 0.78rem !important;
+  }
+
+  /* Rebalancing sliders — apilado vertical en móvil */
+  .rebalancing-ticker-row {
+    flex-wrap: wrap;
+    gap: 0.5rem !important;
+  }
+
+  .rebalancing-ticker-row .ticker-label {
+    min-width: unset !important;
+  }
+
+  /* Ingreso Anual label no overflow */
+  .kpi-label {
+    font-size: 0.82rem !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 /* Typography */

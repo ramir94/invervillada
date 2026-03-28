@@ -19,6 +19,9 @@ const navItems = [
     { id: 'simulator', label: 'Stress Test', icon: ShieldAlert },
 ]
 
+// Ticker Morningstar de la propia SICAV — se pide junto con los holdings
+const SICAV_TICKER = '0P00011NA7'
+
 export default function DashboardApp() {
     const { session, signOut } = useAuth()
     const [activeTab, setActiveTab] = useState('dashboard')
@@ -34,11 +37,9 @@ export default function DashboardApp() {
             setOperations(ops)
             setSnapshots(snaps)
 
-            const tickers = [...new Set(ops.map(op => op.ticker))]
-            if (tickers.length > 0) {
-                const market = await getMarketData(tickers)
-                setMarketData(market)
-            }
+            const tickers = [...new Set(ops.map(op => op.ticker)), SICAV_TICKER]
+            const market = await getMarketData(tickers)
+            setMarketData(market)
             setLoading(false)
         }
         init()
@@ -50,11 +51,12 @@ export default function DashboardApp() {
         [operations]
     )
 
-    // Refrescar precios cada 30 segundos para los tickers en cartera
+    // Refrescar precios cada 30 segundos (tickers cartera + SICAV)
     useEffect(() => {
         if (!tickerList.length) return
+        const allTickers = [...tickerList, SICAV_TICKER]
         const interval = setInterval(() => {
-            getMarketData(tickerList).then(data => {
+            getMarketData(allTickers).then(data => {
                 if (Object.keys(data).length > 0) setMarketData(data)
             })
         }, 30000)
@@ -256,7 +258,7 @@ export default function DashboardApp() {
             </aside>
 
             <main className="main-content">
-                {activeTab === 'dashboard' && <Dashboard analytics={analytics} drawdown={drawdown} portfolioReturn={portfolioReturn} />}
+                {activeTab === 'dashboard' && <Dashboard analytics={analytics} drawdown={drawdown} portfolioReturn={portfolioReturn} sicavData={marketData?.[SICAV_TICKER] ?? null} />}
                 {activeTab === 'portfolio' && <PortfolioTable analytics={analytics} />}
                 {activeTab === 'operations' && (
                     <Operations

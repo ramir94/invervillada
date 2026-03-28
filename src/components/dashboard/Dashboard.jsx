@@ -3,7 +3,7 @@ import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import { Doughnut } from 'react-chartjs-2';
 import { formatCurrency } from '../../utils/formatting';
 import { BENCHMARK_RETURNS } from '../../utils/analytics';
-import { AlertTriangle, TrendingUp, TrendingDown, Wallet, Activity, Shield, Target, Info, BarChart2, DollarSign, Globe } from 'lucide-react';
+import { AlertTriangle, TrendingUp, TrendingDown, Wallet, Activity, Shield, Target, Info, BarChart2, DollarSign, Globe, Landmark } from 'lucide-react';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -32,7 +32,7 @@ const CURRENCY_COLORS = {
     GBp: '#f472b6',
 };
 
-export default function Dashboard({ analytics, drawdown, portfolioReturn }) {
+export default function Dashboard({ analytics, drawdown, portfolioReturn, sicavData }) {
     const sectorChartData = useMemo(() => {
         if (!analytics) return null;
         const sectorMap = {};
@@ -87,6 +87,11 @@ export default function Dashboard({ analytics, drawdown, portfolioReturn }) {
                 <h2>Visión General</h2>
                 <p style={{ color: 'var(--text-secondary)' }}>Estado real del portfolio y señales de riesgo activas.</p>
             </header>
+
+            {/* SICAV NAV — barra compacta */}
+            {sicavData && sicavData.price > 0 && (
+                <SicavNavBar data={sicavData} />
+            )}
 
             {/* Alertas críticas */}
             {highAlerts.length > 0 && (
@@ -546,6 +551,63 @@ function ReturnCell({ value, isPortfolio }) {
             color,
         }}>
             {value >= 0 ? '+' : ''}{value.toFixed(1)}%
+        </div>
+    );
+}
+
+function SicavNavBar({ data }) {
+    const { price, changePercent, changeAmount, high52w, low52w, currency } = data;
+    const isUp = changePercent >= 0;
+    const color = isUp ? 'var(--success)' : 'var(--danger)';
+    const ccy = currency ?? 'EUR';
+
+    const formatNav = (v) => v != null
+        ? v.toLocaleString('es-ES', { style: 'currency', currency: ccy, minimumFractionDigits: 2 })
+        : '—';
+
+    // Posición del precio actual dentro del rango 52 semanas (0-100%)
+    const range52w = high52w && low52w && high52w > low52w
+        ? ((price - low52w) / (high52w - low52w)) * 100
+        : null;
+
+    return (
+        <div className="glass-panel" style={{
+            padding: '0.75rem 1.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '1rem',
+            flexWrap: 'wrap',
+            fontSize: '0.85rem',
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                <Landmark size={15} color="var(--accent-color)" />
+                <span style={{ fontWeight: '700', color: 'var(--accent-color)' }}>Invervillada SICAV</span>
+            </div>
+
+            <span style={{ fontWeight: '700', fontSize: '1rem' }}>{formatNav(price)}</span>
+
+            <span style={{ color, fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                {isUp ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
+                {changeAmount != null && (isUp ? '+' : '') + changeAmount.toFixed(2)}
+                {changePercent != null && ` (${isUp ? '+' : ''}${changePercent.toFixed(2)}%)`}
+            </span>
+
+            {high52w != null && low52w != null && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto', color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
+                    <span>52s: {formatNav(low52w)}</span>
+                    {range52w != null && (
+                        <div style={{ width: '60px', height: '5px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', overflow: 'hidden', position: 'relative' }}>
+                            <div style={{
+                                height: '100%',
+                                width: `${Math.min(100, Math.max(0, range52w))}%`,
+                                background: range52w > 70 ? 'var(--success)' : range52w > 30 ? '#eab308' : 'var(--danger)',
+                                borderRadius: '3px',
+                            }} />
+                        </div>
+                    )}
+                    <span>{formatNav(high52w)}</span>
+                </div>
+            )}
         </div>
     );
 }

@@ -52,6 +52,7 @@ export default function PortfolioTable({ analytics }) {
             case 'risk': return b.riskContribution - a.riskContribution;
             case 'pnlPct': return b.unrealizedPnLPct - a.unrealizedPnLPct;
             case 'pnlAbs': return b.unrealizedPnL - a.unrealizedPnL;
+            case 'yield': return b.annualYield - a.annualYield;
             case 'value': return b.value - a.value;
             default: return 0;
         }
@@ -71,6 +72,7 @@ export default function PortfolioTable({ analytics }) {
                 <SortButton id="weight" label="Peso %" current={sortBy} onClick={setSortBy} />
                 <SortButton id="risk" label="Contribución riesgo" current={sortBy} onClick={setSortBy} />
                 <SortButton id="pnlPct" label="P&L %" current={sortBy} onClick={setSortBy} />
+                <SortButton id="yield" label="Yield" current={sortBy} onClick={setSortBy} />
                 <SortButton id="value" label="Valor" current={sortBy} onClick={setSortBy} />
             </div>
 
@@ -94,6 +96,11 @@ export default function PortfolioTable({ analytics }) {
                                 </span>
                             </th>
                             <th style={{ textAlign: 'right' }}>P&L %</th>
+                            <th style={{ textAlign: 'right' }}>
+                                <span title="Yield anual estimado e ingreso por dividendos" style={{ cursor: 'help', borderBottom: '1px dashed rgba(255,255,255,0.3)' }}>
+                                    Yield / Ingreso
+                                </span>
+                            </th>
                             <th style={{ textAlign: 'right' }}>Var. Hoy</th>
                             <th style={{ textAlign: 'center' }}>
                                 <span title="Alertas activas para esta posición" style={{ cursor: 'help' }}>
@@ -142,6 +149,20 @@ export default function PortfolioTable({ analytics }) {
                                         }}>
                                             {row.unrealizedPnLPct >= 0 ? '+' : ''}{row.unrealizedPnLPct.toFixed(1)}%
                                         </span>
+                                    </td>
+                                    <td style={{ textAlign: 'right' }}>
+                                        {row.annualYield > 0 ? (
+                                            <div>
+                                                <div style={{ color: 'var(--success)', fontWeight: '600', fontSize: '0.88rem' }}>
+                                                    {row.annualYield.toFixed(1)}%
+                                                </div>
+                                                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                                                    {formatCurrency(row.annualIncome)}/yr
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>—</span>
+                                        )}
                                     </td>
                                     <td style={{ textAlign: 'right', color: row.dailyChangePct >= 0 ? 'var(--success)' : 'var(--danger)' }}>
                                         {row.dailyChangePct >= 0 ? (

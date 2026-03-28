@@ -7,7 +7,7 @@ import Simulator from './Simulator'
 import Operations from './Operations'
 import { getMarketData } from '../../services/marketData'
 import { getOperations, buildHoldingsFromOperations } from '../../services/operations'
-import { calculateCostBasis, calculatePortfolioMetrics, calculateDrawdown } from '../../utils/analytics'
+import { calculateCostBasis, calculatePortfolioMetrics, calculateDrawdown, calculatePortfolioReturn } from '../../utils/analytics'
 import { saveSnapshot, getSnapshots } from '../../services/snapshots'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -54,6 +54,11 @@ export default function DashboardApp() {
 
     const drawdown = useMemo(
         () => analytics ? calculateDrawdown(snapshots, analytics.totalValue) : null,
+        [snapshots, analytics]
+    )
+
+    const portfolioReturn = useMemo(
+        () => analytics ? calculatePortfolioReturn(snapshots, analytics.totalValue) : null,
         [snapshots, analytics]
     )
 
@@ -232,7 +237,7 @@ export default function DashboardApp() {
             </aside>
 
             <main className="main-content">
-                {activeTab === 'dashboard' && <Dashboard analytics={analytics} drawdown={drawdown} />}
+                {activeTab === 'dashboard' && <Dashboard analytics={analytics} drawdown={drawdown} portfolioReturn={portfolioReturn} />}
                 {activeTab === 'portfolio' && <PortfolioTable analytics={analytics} />}
                 {activeTab === 'operations' && (
                     <Operations

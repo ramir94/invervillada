@@ -2,7 +2,8 @@ import { useMemo } from 'react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import { Doughnut } from 'react-chartjs-2';
 import { formatCurrency } from '../../utils/formatting';
-import { AlertTriangle, TrendingUp, TrendingDown, Wallet, Activity, Shield, Target, Info, BarChart2 } from 'lucide-react';
+import { BENCHMARK_RETURNS } from '../../utils/analytics';
+import { AlertTriangle, TrendingUp, TrendingDown, Wallet, Activity, Shield, Target, Info, BarChart2, DollarSign, Globe } from 'lucide-react';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -22,7 +23,16 @@ const FACTOR_COLORS = {
     other: '#94a3b8',
 };
 
-export default function Dashboard({ analytics, drawdown }) {
+const CURRENCY_COLORS = {
+    USD: '#38bdf8',
+    EUR: '#818cf8',
+    CHF: '#22c55e',
+    GBP: '#f472b6',
+    JPY: '#eab308',
+    GBp: '#f472b6',
+};
+
+export default function Dashboard({ analytics, drawdown, portfolioReturn }) {
     const sectorChartData = useMemo(() => {
         if (!analytics) return null;
         const sectorMap = {};
@@ -51,8 +61,9 @@ export default function Dashboard({ analytics, drawdown }) {
     const {
         totalValue, totalDailyChange, totalDailyChangePct,
         totalUnrealizedPnL, totalUnrealizedPnLPct,
+        totalAnnualIncome, portfolioYield,
         top3Weight, top3, portfolioBeta,
-        factorExposure, healthScore, alerts, positions,
+        factorExposure, currencyExposure, healthScore, alerts, positions,
     } = analytics;
 
     const scoreColor = healthScore.score >= 70
@@ -102,7 +113,7 @@ export default function Dashboard({ analytics, drawdown }) {
 
             {/* KPI row */}
             <div className="dashboard-grid">
-                {/* Patrimonio total + P&L real */}
+                {/* Patrimonio total + P&L real + variación diaria como secundario */}
                 <div className="glass-panel" style={{ padding: '1.5rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div>
@@ -118,6 +129,15 @@ export default function Dashboard({ analytics, drawdown }) {
                                 {totalUnrealizedPnL >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
                                 P&L total: {totalUnrealizedPnL >= 0 ? '+' : ''}{formatCurrency(totalUnrealizedPnL)}
                                 {' '}({totalUnrealizedPnLPct >= 0 ? '+' : ''}{totalUnrealizedPnLPct.toFixed(1)}%)
+                            </div>
+                            {/* Variación diaria — secundaria */}
+                            <div style={{ fontSize: '0.78rem', marginTop: '0.3rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                <Activity size={11} />
+                                Hoy:
+                                <span style={{ color: totalDailyChange >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                                    {' '}{totalDailyChange >= 0 ? '+' : ''}{formatCurrency(totalDailyChange)}
+                                    {' '}({totalDailyChangePct >= 0 ? '+' : ''}{totalDailyChangePct.toFixed(2)}%)
+                                </span>
                             </div>
                         </div>
                         <div style={{ padding: '10px', background: 'rgba(56,189,248,0.1)', borderRadius: '12px' }}>
@@ -157,28 +177,27 @@ export default function Dashboard({ analytics, drawdown }) {
                     </div>
                 </div>
 
-                {/* Variación diaria — posición secundaria */}
+                {/* Ingreso Anual Estimado */}
                 <div className="glass-panel" style={{ padding: '1.5rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div>
-                            <h3 style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Variación Diaria</h3>
-                            <div style={{
-                                fontSize: '1.5rem', fontWeight: 'bold', marginTop: '0.5rem',
-                                color: totalDailyChange >= 0 ? 'var(--success)' : 'var(--danger)',
-                                display: 'flex', alignItems: 'center', gap: '0.4rem',
-                            }}>
-                                {totalDailyChange >= 0 ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
-                                {formatCurrency(Math.abs(totalDailyChange))}
+                            <h3 style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Ingreso Anual Est.</h3>
+                            <div style={{ fontSize: '2rem', fontWeight: 'bold', marginTop: '0.5rem', color: 'var(--text-primary)' }}>
+                                {formatCurrency(totalAnnualIncome)}
                             </div>
                             <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
-                                {totalDailyChangePct >= 0 ? '+' : ''}{totalDailyChangePct.toFixed(2)}% hoy
-                                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginLeft: '0.4rem' }}>
-                                    · {positions.length} posiciones
+                                Yield:{' '}
+                                <span style={{
+                                    color: portfolioYield >= 2.5 ? 'var(--success)' : portfolioYield >= 1 ? '#eab308' : 'var(--text-secondary)',
+                                    fontWeight: '600',
+                                }}>
+                                    {portfolioYield.toFixed(2)}%
                                 </span>
+                                {' '}· vía dividendos
                             </div>
                         </div>
-                        <div style={{ padding: '10px', background: totalDailyChange >= 0 ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', borderRadius: '12px' }}>
-                            <Activity color={totalDailyChange >= 0 ? 'var(--success)' : 'var(--danger)'} size={24} />
+                        <div style={{ padding: '10px', background: 'rgba(34,197,94,0.1)', borderRadius: '12px' }}>
+                            <DollarSign color="var(--success)" size={24} />
                         </div>
                     </div>
                 </div>
@@ -187,6 +206,11 @@ export default function Dashboard({ analytics, drawdown }) {
             {/* Drawdown Tracker */}
             {drawdown && (
                 <DrawdownWidget drawdown={drawdown} totalValue={totalValue} />
+            )}
+
+            {/* Benchmark comparison */}
+            {portfolioReturn && (
+                <BenchmarkWidget portfolioReturn={portfolioReturn} />
             )}
 
             {/* Alertas medias */}
@@ -211,8 +235,8 @@ export default function Dashboard({ analytics, drawdown }) {
                 </div>
             )}
 
-            {/* Concentración + Factor Exposure */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
+            {/* Concentración + Factor Exposure + Currency Exposure */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.5rem' }}>
 
                 {/* Concentración */}
                 <div className="glass-panel" style={{ padding: '1.5rem' }}>
@@ -303,6 +327,53 @@ export default function Dashboard({ analytics, drawdown }) {
                             ))}
                     </div>
                 </div>
+
+                {/* Currency Exposure */}
+                {currencyExposure && Object.keys(currencyExposure).length > 0 && (
+                    <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                        <h3 style={{ marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Globe size={16} color="var(--accent-color)" />
+                            Exposición Divisa
+                        </h3>
+                        <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '1.25rem', display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+                            <Info size={12} />
+                            Riesgo de tipo de cambio no cubierto
+                        </p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                            {Object.entries(currencyExposure)
+                                .sort((a, b) => b[1] - a[1])
+                                .map(([ccy, weight]) => {
+                                    const color = CURRENCY_COLORS[ccy] ?? '#94a3b8';
+                                    const isHigh = weight > 80;
+                                    return (
+                                        <div key={ccy}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                                                <span style={{ fontSize: '0.83rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: color, flexShrink: 0, display: 'inline-block' }} />
+                                                    {ccy}
+                                                    {isHigh && (
+                                                        <span style={{ color: '#eab308', fontSize: '0.72rem' }}>{'⚠ >80%'}</span>
+                                                    )}
+                                                </span>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: '600', color: isHigh ? '#eab308' : 'var(--text-primary)' }}>
+                                                    {weight.toFixed(1)}%
+                                                </span>
+                                            </div>
+                                            <div style={{ height: '7px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', overflow: 'hidden' }}>
+                                                <div style={{
+                                                    height: '100%',
+                                                    width: `${Math.min(100, weight)}%`,
+                                                    background: color,
+                                                    borderRadius: '4px',
+                                                    transition: 'width 0.5s',
+                                                }} />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Sector doughnut — secundario */}
@@ -338,6 +409,10 @@ function DrawdownWidget({ drawdown, totalValue }) {
     const barWidth = isAtMax ? 100 : Math.max(0, 100 + drawdownPct); // % del máximo que conservamos
     const barColor = drawdownPct >= -5 ? 'var(--success)' : drawdownPct >= -15 ? '#eab308' : 'var(--danger)';
 
+    const daysSinceMax = maxDate && !isAtMax
+        ? Math.round((new Date() - new Date(maxDate + 'T00:00:00')) / (1000 * 60 * 60 * 24))
+        : null;
+
     return (
         <div className="glass-panel" style={{
             padding: '1.5rem',
@@ -355,6 +430,7 @@ function DrawdownWidget({ drawdown, totalValue }) {
                     {maxDate && (
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>
                             {new Date(maxDate + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            {daysSinceMax !== null && ` · hace ${daysSinceMax}d`}
                         </div>
                     )}
                 </div>
@@ -401,6 +477,75 @@ function DrawdownWidget({ drawdown, totalValue }) {
                     }} />
                 </div>
             </div>
+        </div>
+    );
+}
+
+function BenchmarkWidget({ portfolioReturn }) {
+    const { ytd, '1y': oneYear } = portfolioReturn;
+
+    const rows = [
+        { label: 'Mi Cartera', ytd, '1y': oneYear, isPortfolio: true },
+        { label: BENCHMARK_RETURNS.SP500.label, ytd: BENCHMARK_RETURNS.SP500.ytd, '1y': BENCHMARK_RETURNS.SP500['1y'], isPortfolio: false },
+        { label: BENCHMARK_RETURNS.MSCI_WORLD.label, ytd: BENCHMARK_RETURNS.MSCI_WORLD.ytd, '1y': BENCHMARK_RETURNS.MSCI_WORLD['1y'], isPortfolio: false },
+    ];
+
+    const hasAnyData = ytd !== null || oneYear !== null;
+
+    return (
+        <div className="glass-panel" style={{ padding: '1.5rem' }}>
+            <h3 style={{ marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <TrendingUp size={16} color="var(--accent-color)" />
+                Rendimiento vs Benchmark
+            </h3>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '1.25rem', display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+                <Info size={12} />
+                Benchmarks con datos de referencia estáticos · Datos de cartera calculados desde snapshots históricos
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0.5rem 1.5rem', alignItems: 'center' }}>
+                {/* Headers */}
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }} />
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textAlign: 'right', fontWeight: '600' }}>YTD</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textAlign: 'right', fontWeight: '600' }}>1 Año</div>
+                {/* Rows */}
+                {rows.map(row => (
+                    <>
+                        <div key={`${row.label}-label`} style={{
+                            fontSize: '0.85rem',
+                            fontWeight: row.isPortfolio ? '700' : '400',
+                            color: row.isPortfolio ? 'var(--accent-color)' : 'var(--text-secondary)',
+                        }}>
+                            {row.label}
+                        </div>
+                        <ReturnCell key={`${row.label}-ytd`} value={row.ytd} isPortfolio={row.isPortfolio} />
+                        <ReturnCell key={`${row.label}-1y`} value={row['1y']} isPortfolio={row.isPortfolio} />
+                    </>
+                ))}
+            </div>
+            {!hasAnyData && (
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.75rem' }}>
+                    Se necesitan snapshots de fechas anteriores para calcular el rendimiento de la cartera.
+                </p>
+            )}
+        </div>
+    );
+}
+
+function ReturnCell({ value, isPortfolio }) {
+    if (value === null || value === undefined) {
+        return (
+            <div style={{ textAlign: 'right', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>—</div>
+        );
+    }
+    const color = value >= 0 ? 'var(--success)' : 'var(--danger)';
+    return (
+        <div style={{
+            textAlign: 'right',
+            fontSize: '0.85rem',
+            fontWeight: isPortfolio ? '700' : '500',
+            color,
+        }}>
+            {value >= 0 ? '+' : ''}{value.toFixed(1)}%
         </div>
     );
 }

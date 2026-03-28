@@ -1,7 +1,8 @@
 // Beta proxy por sector — estimaciones estándar de mercado
+// Nombres de sector tal como aparecen en stockCatalog.js
 const SECTOR_BETA = {
     'Technology': 1.30,
-    'Healthcare': 0.70,
+    'Health Care': 0.70,
     'Consumer Staples': 0.50,
     'Real Estate': 0.90,
     'Energy': 1.10,
@@ -11,17 +12,15 @@ const SECTOR_BETA = {
     'Utilities': 0.40,
     'Communication Services': 1.10,
     'Materials': 0.95,
-    'Defense': 0.80,
 };
 
 const SECTOR_FACTOR = {
     'Technology': 'growth',
     'Consumer Discretionary': 'growth',
     'Communication Services': 'growth',
-    'Healthcare': 'defensive',
+    'Health Care': 'defensive',
     'Consumer Staples': 'defensive',
     'Utilities': 'defensive',
-    'Defense': 'defensive',
     'Real Estate': 'dividend',
     'Energy': 'dividend',
     'Financials': 'dividend',

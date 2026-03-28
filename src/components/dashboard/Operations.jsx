@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { PlusCircle, Trash2, TrendingUp, TrendingDown, Search, AlertTriangle, ArrowRight } from 'lucide-react'
+import { PlusCircle, Trash2, TrendingUp, TrendingDown, Search, AlertTriangle, ArrowRight, ChevronUp, ChevronDown, ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight, X } from 'lucide-react'
+
+const PAGE_SIZE = 10
 import { addOperation, deleteOperation } from '../../services/operations'
 import { searchStocks } from '../../data/stockCatalog'
 import { formatCurrency } from '../../utils/formatting'
@@ -91,6 +93,14 @@ export default function Operations({ operations, analytics, onOperationAdded, on
     const [error, setError] = useState(null)
     const [showForm, setShowForm] = useState(false)
     const suggestionsRef = useRef(null)
+
+    // Estado de filtros, sorting y paginación de la tabla
+    const [filterText, setFilterText] = useState('')
+    const [filterType, setFilterType] = useState('all')
+    const [filterSector, setFilterSector] = useState('')
+    const [sortCol, setSortCol] = useState('date')
+    const [sortDir, setSortDir] = useState('desc')
+    const [page, setPage] = useState(0)
 
     useEffect(() => {
         const handleClick = (e) => {
@@ -474,57 +484,266 @@ export default function Operations({ operations, analytics, onOperationAdded, on
                     <p>No hay operaciones registradas. ¡Añade tu primera compra!</p>
                 </div>
             ) : (
-                <div className="glass-panel table-container">
-                    <table>
-                        <thead>
+                <OperationsTable
+                    operations={operations}
+                    onDelete={handleDelete}
+                    filterText={filterText} setFilterText={setFilterText}
+                    filterType={filterType} setFilterType={setFilterType}
+                    filterSector={filterSector} setFilterSector={setFilterSector}
+                    sortCol={sortCol} setSortCol={setSortCol}
+                    sortDir={sortDir} setSortDir={setSortDir}
+                    page={page} setPage={setPage}
+                />
+            )}
+        </div>
+    )
+}
+
+function OperationsTable({
+    operations, onDelete,
+    filterText, setFilterText,
+    filterType, setFilterType,
+    filterSector, setFilterSector,
+    sortCol, setSortCol,
+    sortDir, setSortDir,
+    page, setPage,
+}) {
+    // Sectores únicos para el select
+    const sectors = useMemo(
+        () => [...new Set(operations.map(op => op.sector).filter(Boolean))].sort(),
+        [operations]
+    )
+
+    // Filtrado
+    const filtered = useMemo(() => {
+        const text = filterText.toLowerCase()
+        return operations.filter(op => {
+            if (filterType !== 'all' && op.type !== filterType) return false
+            if (filterSector && op.sector !== filterSector) return false
+            if (text && !op.ticker.toLowerCase().includes(text) && !op.company_name?.toLowerCase().includes(text)) return false
+            return true
+        })
+    }, [operations, filterText, filterType, filterSector])
+
+    // Sorting
+    const sorted = useMemo(() => {
+        return [...filtered].sort((a, b) => {
+            let va, vb
+            switch (sortCol) {
+                case 'ticker': va = a.ticker; vb = b.ticker; break
+                case 'empresa': va = a.company_name ?? ''; vb = b.company_name ?? ''; break
+                case 'sector': va = a.sector ?? ''; vb = b.sector ?? ''; break
+                case 'shares': va = Number(a.shares); vb = Number(b.shares); break
+                case 'price': va = Number(a.price); vb = Number(b.price); break
+                case 'total': va = Number(a.shares) * Number(a.price); vb = Number(b.shares) * Number(b.price); break
+                case 'type': va = a.type; vb = b.type; break
+                default: va = a.date; vb = b.date
+            }
+            if (typeof va === 'string') return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va)
+            return sortDir === 'asc' ? va - vb : vb - va
+        })
+    }, [filtered, sortCol, sortDir])
+
+    // Paginación
+    const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
+    const safePage = Math.min(page, totalPages - 1)
+    const paginated = sorted.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE)
+
+    const handleSort = (col) => {
+        if (sortCol === col) {
+            setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+        } else {
+            setSortCol(col)
+            setSortDir('desc')
+        }
+        setPage(0)
+    }
+
+    const resetFilters = () => {
+        setFilterText('')
+        setFilterType('all')
+        setFilterSector('')
+        setPage(0)
+    }
+
+    const hasActiveFilters = filterText || filterType !== 'all' || filterSector
+
+    const SortIcon = ({ col }) => {
+        if (sortCol !== col) return <ChevronDown size={12} style={{ opacity: 0.25 }} />
+        return sortDir === 'asc' ? <ChevronUp size={12} style={{ color: 'var(--accent-color)' }} /> : <ChevronDown size={12} style={{ color: 'var(--accent-color)' }} />
+    }
+
+    const thStyle = (col, align = 'left') => ({
+        cursor: 'pointer',
+        userSelect: 'none',
+        textAlign: align,
+        color: sortCol === col ? 'var(--accent-color)' : undefined,
+        whiteSpace: 'nowrap',
+    })
+
+    return (
+        <div>
+            {/* Barra de filtros */}
+            <div style={{
+                display: 'flex', gap: '0.75rem', marginBottom: '1rem',
+                flexWrap: 'wrap', alignItems: 'center',
+            }}>
+                {/* Búsqueda */}
+                <div style={{ position: 'relative', flex: '1 1 180px' }}>
+                    <Search size={14} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }} />
+                    <input
+                        className="login-input"
+                        placeholder="Buscar ticker o empresa..."
+                        value={filterText}
+                        onChange={e => { setFilterText(e.target.value); setPage(0) }}
+                        style={{ paddingLeft: '2.2rem', height: '36px', fontSize: '0.85rem' }}
+                    />
+                </div>
+
+                {/* Tipo */}
+                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    {[['all', 'Todos'], ['buy', 'Compras'], ['sell', 'Ventas']].map(([val, label]) => (
+                        <button key={val} onClick={() => { setFilterType(val); setPage(0) }} style={{
+                            padding: '0.35rem 0.75rem', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer',
+                            border: filterType === val ? `1px solid ${val === 'buy' ? 'var(--success)' : val === 'sell' ? 'var(--danger)' : 'rgba(56,189,248,0.5)'}` : '1px solid rgba(255,255,255,0.08)',
+                            background: filterType === val ? (val === 'buy' ? 'rgba(34,197,94,0.1)' : val === 'sell' ? 'rgba(239,68,68,0.1)' : 'rgba(56,189,248,0.1)') : 'rgba(255,255,255,0.03)',
+                            color: filterType === val ? (val === 'buy' ? 'var(--success)' : val === 'sell' ? 'var(--danger)' : 'var(--accent-color)') : 'var(--text-secondary)',
+                            fontWeight: filterType === val ? '600' : '400',
+                            transition: 'all 0.15s',
+                        }}>{label}</button>
+                    ))}
+                </div>
+
+                {/* Sector */}
+                <select
+                    value={filterSector}
+                    onChange={e => { setFilterSector(e.target.value); setPage(0) }}
+                    style={{
+                        background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '6px', color: filterSector ? 'var(--text-primary)' : 'var(--text-secondary)',
+                        padding: '0.35rem 0.75rem', fontSize: '0.82rem', cursor: 'pointer', height: '36px',
+                    }}
+                >
+                    <option value="">Todos los sectores</option>
+                    {sectors.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+
+                {/* Reset */}
+                {hasActiveFilters && (
+                    <button onClick={resetFilters} style={{
+                        background: 'transparent', border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '6px', color: 'var(--text-secondary)', padding: '0.35rem 0.6rem',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem',
+                    }}>
+                        <X size={13} /> Limpiar
+                    </button>
+                )}
+
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 'auto' }}>
+                    {filtered.length} de {operations.length} operaciones
+                </span>
+            </div>
+
+            {/* Tabla */}
+            <div className="glass-panel table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style={thStyle('type')} onClick={() => handleSort('type')}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>Tipo <SortIcon col="type" /></span>
+                            </th>
+                            <th style={thStyle('ticker')} onClick={() => handleSort('ticker')}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>Ticker <SortIcon col="ticker" /></span>
+                            </th>
+                            <th style={thStyle('empresa')} onClick={() => handleSort('empresa')}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>Empresa <SortIcon col="empresa" /></span>
+                            </th>
+                            <th style={thStyle('sector')} onClick={() => handleSort('sector')}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>Sector <SortIcon col="sector" /></span>
+                            </th>
+                            <th style={thStyle('shares', 'right')} onClick={() => handleSort('shares')}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', justifyContent: 'flex-end' }}>Acciones <SortIcon col="shares" /></span>
+                            </th>
+                            <th style={thStyle('price', 'right')} onClick={() => handleSort('price')}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', justifyContent: 'flex-end' }}>Precio <SortIcon col="price" /></span>
+                            </th>
+                            <th style={thStyle('total', 'right')} onClick={() => handleSort('total')}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', justifyContent: 'flex-end' }}>Total <SortIcon col="total" /></span>
+                            </th>
+                            <th style={thStyle('date')} onClick={() => handleSort('date')}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>Fecha <SortIcon col="date" /></span>
+                            </th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {paginated.length === 0 ? (
                             <tr>
-                                <th>Tipo</th>
-                                <th>Ticker</th>
-                                <th>Empresa</th>
-                                <th>Sector</th>
-                                <th style={{ textAlign: 'right' }}>Acciones</th>
-                                <th style={{ textAlign: 'right' }}>Precio</th>
-                                <th style={{ textAlign: 'right' }}>Total</th>
-                                <th>Fecha</th>
-                                <th></th>
+                                <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+                                    Sin resultados para los filtros aplicados
+                                </td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            {operations.map(op => (
-                                <tr key={op.id}>
-                                    <td>
-                                        <span style={{
-                                            padding: '0.2rem 0.6rem',
-                                            borderRadius: '999px',
-                                            fontSize: '0.8rem',
-                                            fontWeight: '600',
-                                            background: op.type === 'buy' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                                            color: op.type === 'buy' ? 'var(--success)' : 'var(--danger)'
-                                        }}>
-                                            {op.type === 'buy' ? 'Compra' : 'Venta'}
-                                        </span>
-                                    </td>
-                                    <td style={{ fontWeight: 'bold', color: 'var(--accent-color)' }}>{op.ticker}</td>
-                                    <td>{op.company_name}</td>
-                                    <td style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{op.sector}</td>
-                                    <td style={{ textAlign: 'right' }}>{Number(op.shares).toLocaleString()}</td>
-                                    <td style={{ textAlign: 'right' }}>{formatCurrency(op.price, op.currency)}</td>
-                                    <td style={{ textAlign: 'right', fontWeight: '600' }}>{formatCurrency(op.shares * op.price, op.currency)}</td>
-                                    <td style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{op.date}</td>
-                                    <td>
-                                        <button
-                                            onClick={() => handleDelete(op.id)}
-                                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '0.25rem', transition: 'color 0.2s' }}
-                                            onMouseEnter={e => e.currentTarget.style.color = 'var(--danger)'}
-                                            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-secondary)'}
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                        ) : paginated.map(op => (
+                            <tr key={op.id}>
+                                <td>
+                                    <span style={{
+                                        padding: '0.2rem 0.6rem', borderRadius: '999px',
+                                        fontSize: '0.8rem', fontWeight: '600',
+                                        background: op.type === 'buy' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                                        color: op.type === 'buy' ? 'var(--success)' : 'var(--danger)'
+                                    }}>
+                                        {op.type === 'buy' ? 'Compra' : 'Venta'}
+                                    </span>
+                                </td>
+                                <td style={{ fontWeight: 'bold', color: 'var(--accent-color)' }}>{op.ticker}</td>
+                                <td>{op.company_name}</td>
+                                <td style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{op.sector}</td>
+                                <td style={{ textAlign: 'right' }}>{Number(op.shares).toLocaleString()}</td>
+                                <td style={{ textAlign: 'right' }}>{formatCurrency(op.price, op.currency)}</td>
+                                <td style={{ textAlign: 'right', fontWeight: '600' }}>{formatCurrency(op.shares * op.price, op.currency)}</td>
+                                <td style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{op.date}</td>
+                                <td>
+                                    <button
+                                        onClick={() => onDelete(op.id)}
+                                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '0.25rem', transition: 'color 0.2s' }}
+                                        onMouseEnter={e => e.currentTarget.style.color = 'var(--danger)'}
+                                        onMouseLeave={e => e.currentTarget.style.color = 'var(--text-secondary)'}
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* Paginación */}
+            {totalPages > 1 && (
+                <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    marginTop: '0.75rem', flexWrap: 'wrap', gap: '0.5rem',
+                }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        Página {safePage + 1} de {totalPages} · {sorted.length} resultados
+                    </span>
+                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                        {[
+                            { icon: ChevronsLeft, action: () => setPage(0), disabled: safePage === 0 },
+                            { icon: ChevronLeft, action: () => setPage(p => Math.max(0, p - 1)), disabled: safePage === 0 },
+                            { icon: ChevronRight, action: () => setPage(p => Math.min(totalPages - 1, p + 1)), disabled: safePage >= totalPages - 1 },
+                            { icon: ChevronsRight, action: () => setPage(totalPages - 1), disabled: safePage >= totalPages - 1 },
+                        ].map(({ icon: Icon, action, disabled }, i) => (
+                            <button key={i} onClick={action} disabled={disabled} style={{
+                                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+                                borderRadius: '6px', padding: '0.3rem 0.5rem', cursor: disabled ? 'not-allowed' : 'pointer',
+                                color: disabled ? 'var(--text-secondary)' : 'var(--text-primary)', opacity: disabled ? 0.4 : 1,
+                                display: 'flex', alignItems: 'center',
+                            }}>
+                                <Icon size={15} />
+                            </button>
+                        ))}
+                    </div>
                 </div>
             )}
         </div>

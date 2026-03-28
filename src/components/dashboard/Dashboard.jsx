@@ -32,7 +32,7 @@ const CURRENCY_COLORS = {
     GBp: '#f472b6',
 };
 
-export default function Dashboard({ analytics, drawdown, portfolioReturn, sicavData }) {
+export default function Dashboard({ analytics, drawdown, portfolioReturn, sicavData, snapshotCount = 0 }) {
     const sectorChartData = useMemo(() => {
         if (!analytics) return null;
         const sectorMap = {};
@@ -206,7 +206,7 @@ export default function Dashboard({ analytics, drawdown, portfolioReturn, sicavD
             {/* Drawdown Tracker + SICAV NAV — misma fila */}
             <div style={{ display: 'grid', gridTemplateColumns: drawdown && sicavData?.price > 0 ? '1fr auto' : '1fr', gap: '1.5rem', alignItems: 'stretch' }}>
                 {drawdown && (
-                    <DrawdownWidget drawdown={drawdown} totalValue={totalValue} />
+                    <DrawdownWidget drawdown={drawdown} totalValue={totalValue} snapshotCount={snapshotCount} />
                 )}
                 {sicavData && sicavData.price > 0 && (
                     <SicavNavBar data={sicavData} />
@@ -406,17 +406,42 @@ export default function Dashboard({ analytics, drawdown, portfolioReturn, sicavD
     );
 }
 
-function DrawdownWidget({ drawdown, totalValue }) {
+function DrawdownWidget({ drawdown, totalValue, snapshotCount }) {
     const { maxValue, maxDate, drawdownPct, drawdownAbs, recoveryNeededPct } = drawdown;
-    const isAtMax = drawdownPct >= -0.01; // prácticamente en máximos
+    const isAtMax = drawdownPct >= -0.01;
     const isSignificant = drawdownPct < -5;
+    const hasEnoughHistory = snapshotCount >= 5;
 
-    const barWidth = isAtMax ? 100 : Math.max(0, 100 + drawdownPct); // % del máximo que conservamos
+    const barWidth = isAtMax ? 100 : Math.max(0, 100 + drawdownPct);
     const barColor = drawdownPct >= -5 ? 'var(--success)' : drawdownPct >= -15 ? '#eab308' : 'var(--danger)';
 
     const daysSinceMax = maxDate && !isAtMax
         ? Math.round((new Date() - new Date(maxDate + 'T00:00:00')) / (1000 * 60 * 60 * 24))
         : null;
+
+    // Sin historial suficiente, mostrar aviso en vez de datos engañosos
+    if (!hasEnoughHistory) {
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <BarChart2 size={16} color="var(--accent-color)" />
+                    Drawdown desde máximo
+                </h3>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+                    <Info size={16} color="var(--text-secondary)" style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <div>
+                        <div style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                            Se necesitan al menos 5 días de datos para calcular el drawdown.
+                            {' '}El sistema guarda un snapshot diario del valor del portfolio automáticamente.
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                            Snapshots registrados: <span style={{ color: 'var(--accent-color)', fontWeight: '600' }}>{snapshotCount}</span> de 5 mínimos
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="glass-panel" style={{

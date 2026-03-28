@@ -258,7 +258,7 @@ export default function DashboardApp() {
             </aside>
 
             <main className="main-content">
-                {activeTab === 'dashboard' && <Dashboard analytics={analytics} drawdown={drawdown} portfolioReturn={portfolioReturn} sicavData={marketData?.[SICAV_TICKER] ?? null} />}
+                {activeTab === 'dashboard' && <Dashboard analytics={analytics} drawdown={drawdown} portfolioReturn={portfolioReturn} sicavData={marketData?.[SICAV_TICKER] ?? null} snapshotCount={snapshots.length} />}
                 {activeTab === 'portfolio' && <PortfolioTable analytics={analytics} />}
                 {activeTab === 'operations' && (
                     <Operations

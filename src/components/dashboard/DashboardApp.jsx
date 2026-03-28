@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { LayoutDashboard, PieChart, BrainCircuit, ShieldAlert, TrendingUp, LogOut, ArrowLeftRight } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { LayoutDashboard, PieChart, BrainCircuit, ShieldAlert, TrendingUp, LogOut, ArrowLeftRight, AlertTriangle } from 'lucide-react'
 import Dashboard from './Dashboard'
 import PortfolioTable from './PortfolioTable'
 import AIAnalysis from './AIAnalysis'
@@ -7,6 +7,8 @@ import Simulator from './Simulator'
 import Operations from './Operations'
 import { getMarketData } from '../../services/marketData'
 import { getOperations, buildHoldingsFromOperations } from '../../services/operations'
+import { calculateCostBasis, calculatePortfolioMetrics, calculateDrawdown } from '../../utils/analytics'
+import { saveSnapshot, getSnapshots } from '../../services/snapshots'
 import { useAuth } from '../../contexts/AuthContext'
 
 const navItems = [
@@ -22,12 +24,14 @@ export default function DashboardApp() {
     const [activeTab, setActiveTab] = useState('dashboard')
     const [marketData, setMarketData] = useState(null)
     const [operations, setOperations] = useState([])
+    const [snapshots, setSnapshots] = useState([])
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        Promise.all([getMarketData(), getOperations()]).then(([market, ops]) => {
+        Promise.all([getMarketData(), getOperations(), getSnapshots()]).then(([market, ops, snaps]) => {
             setMarketData(market)
             setOperations(ops)
+            setSnapshots(snaps)
             setLoading(false)
         })
 
@@ -38,7 +42,39 @@ export default function DashboardApp() {
         return () => clearInterval(interval)
     }, [])
 
-    const holdings = buildHoldingsFromOperations(operations)
+    const holdings = useMemo(() => buildHoldingsFromOperations(operations), [operations])
+
+    // Capa de analytics: precio medio, P&L real, pesos, concentración, alertas, health score
+    const costBasis = useMemo(() => calculateCostBasis(operations), [operations])
+
+    const analytics = useMemo(
+        () => calculatePortfolioMetrics(holdings, marketData, costBasis),
+        [holdings, marketData, costBasis]
+    )
+
+    const drawdown = useMemo(
+        () => analytics ? calculateDrawdown(snapshots, analytics.totalValue) : null,
+        [snapshots, analytics]
+    )
+
+    // Guardar snapshot del día actual una vez que tenemos el valor del portfolio
+    useEffect(() => {
+        if (!analytics || analytics.totalValue <= 0) return
+        saveSnapshot(analytics.totalValue).then(saved => {
+            if (!saved) return
+            // Actualizar snapshots locales si el guardado fue exitoso
+            setSnapshots(prev => {
+                const today = new Date().toISOString().split('T')[0]
+                const without = prev.filter(s => s.snapshot_date !== today)
+                return [{ snapshot_date: today, total_value: analytics.totalValue }, ...without]
+            })
+        }).catch(() => {
+            // Silenciar errores de snapshot — no bloquear la UI
+        })
+    }, [analytics?.totalValue]) // Solo re-ejecutar si cambia el valor total
+
+    const highAlertCount = analytics?.alerts.filter(a => a.severity === 'high').length ?? 0
+    const totalAlertCount = analytics?.alerts.length ?? 0
 
     const handleOperationAdded = (op) => {
         setOperations(prev => [op, ...prev])
@@ -65,9 +101,19 @@ export default function DashboardApp() {
                         key={item.id}
                         className={`bottom-nav-item${activeTab === item.id ? ' active' : ''}`}
                         onClick={() => setActiveTab(item.id)}
+                        style={{ position: 'relative' }}
                     >
                         <item.icon size={22} />
                         <span>{item.label}</span>
+                        {item.id === 'dashboard' && highAlertCount > 0 && (
+                            <span style={{
+                                position: 'absolute',
+                                top: '4px', right: '12px',
+                                width: '8px', height: '8px',
+                                background: 'var(--danger)',
+                                borderRadius: '50%',
+                            }} />
+                        )}
                     </button>
                 ))}
             </nav>
@@ -96,19 +142,65 @@ export default function DashboardApp() {
                                 textAlign: 'left',
                                 fontSize: '0.95rem',
                                 transition: 'all 0.2s',
-                                width: '100%'
+                                width: '100%',
+                                position: 'relative',
                             }}
                         >
                             <item.icon size={20} />
                             {item.label}
+                            {/* Indicador de alertas en el sidebar */}
+                            {item.id === 'dashboard' && highAlertCount > 0 && (
+                                <span style={{
+                                    marginLeft: 'auto',
+                                    background: 'var(--danger)',
+                                    color: 'white',
+                                    fontSize: '0.7rem',
+                                    fontWeight: '700',
+                                    padding: '0.1rem 0.4rem',
+                                    borderRadius: '999px',
+                                }}>
+                                    {highAlertCount}
+                                </span>
+                            )}
                         </button>
                     ))}
                 </nav>
 
-                <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {/* Health Score en sidebar */}
+                    {analytics && (
+                        <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px' }}>
+                            <small style={{ color: 'var(--text-secondary)', display: 'block', marginBottom: '0.4rem' }}>Health Score</small>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <div style={{ flex: 1, height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', overflow: 'hidden' }}>
+                                    <div style={{
+                                        height: '100%',
+                                        width: `${analytics.healthScore.score}%`,
+                                        background: analytics.healthScore.score >= 70 ? 'var(--success)' : analytics.healthScore.score >= 50 ? '#eab308' : 'var(--danger)',
+                                        borderRadius: '3px',
+                                        transition: 'width 0.5s',
+                                    }} />
+                                </div>
+                                <span style={{
+                                    fontWeight: '700',
+                                    fontSize: '0.9rem',
+                                    color: analytics.healthScore.score >= 70 ? 'var(--success)' : analytics.healthScore.score >= 50 ? '#eab308' : 'var(--danger)',
+                                }}>
+                                    {analytics.healthScore.score}
+                                </span>
+                            </div>
+                            {totalAlertCount > 0 && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.5rem', fontSize: '0.77rem', color: highAlertCount > 0 ? 'var(--danger)' : '#eab308' }}>
+                                    <AlertTriangle size={11} />
+                                    {totalAlertCount} alerta{totalAlertCount > 1 ? 's' : ''} activa{totalAlertCount > 1 ? 's' : ''}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px' }}>
-                        <small style={{ color: 'var(--text-secondary)' }}>Holdings activos</small>
-                        <div style={{ fontWeight: '600', color: 'var(--accent-color)' }}>{holdings.length} posiciones</div>
+                        <small style={{ color: 'var(--text-secondary)' }}>Posiciones activas</small>
+                        <div style={{ fontWeight: '600', color: 'var(--accent-color)' }}>{holdings.length} holdings</div>
                     </div>
 
                     <div style={{ padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px' }}>
@@ -140,17 +232,18 @@ export default function DashboardApp() {
             </aside>
 
             <main className="main-content">
-                {activeTab === 'dashboard' && <Dashboard holdings={holdings} marketData={marketData} />}
-                {activeTab === 'portfolio' && <PortfolioTable holdings={holdings} marketData={marketData} />}
+                {activeTab === 'dashboard' && <Dashboard analytics={analytics} drawdown={drawdown} />}
+                {activeTab === 'portfolio' && <PortfolioTable analytics={analytics} />}
                 {activeTab === 'operations' && (
                     <Operations
                         operations={operations}
+                        analytics={analytics}
                         onOperationAdded={handleOperationAdded}
                         onOperationDeleted={handleOperationDeleted}
                     />
                 )}
-                {activeTab === 'analysis' && <AIAnalysis holdings={holdings} marketData={marketData} />}
-                {activeTab === 'simulator' && <Simulator holdings={holdings} marketData={marketData} />}
+                {activeTab === 'analysis' && <AIAnalysis analytics={analytics} />}
+                {activeTab === 'simulator' && <Simulator analytics={analytics} />}
             </main>
         </div>
     )

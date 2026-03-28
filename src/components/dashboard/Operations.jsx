@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect } from 'react'
-import { PlusCircle, Trash2, TrendingUp, TrendingDown, Search } from 'lucide-react'
+import { useState, useRef, useEffect, useMemo } from 'react'
+import { PlusCircle, Trash2, TrendingUp, TrendingDown, Search, AlertTriangle, ArrowRight } from 'lucide-react'
 import { addOperation, deleteOperation } from '../../services/operations'
-import { searchStocks, STOCK_MAP } from '../../data/stockCatalog'
+import { searchStocks } from '../../data/stockCatalog'
 import { formatCurrency } from '../../utils/formatting'
 
 const emptyForm = {
@@ -15,7 +15,74 @@ const emptyForm = {
     date: new Date().toISOString().split('T')[0],
 }
 
-export default function Operations({ operations, onOperationAdded, onOperationDeleted }) {
+// Calcula el impacto hipotético de una operación sobre el portfolio actual
+const computeOperationImpact = (analytics, form, stockSelected) => {
+    if (!analytics || !stockSelected || !form.shares || !form.price) return null
+    const shares = Number(form.shares)
+    const price = Number(form.price)
+    if (!shares || !price) return null
+
+    const opValue = shares * price
+
+    if (form.type === 'buy') {
+        const newTotal = analytics.totalValue + opValue
+        const existingPos = analytics.positions.find(p => p.ticker === form.ticker)
+        const existingValue = existingPos ? existingPos.value : 0
+        const newPositionValue = existingValue + opValue
+        const newWeight = newTotal > 0 ? (newPositionValue / newTotal) * 100 : 0
+        const currentWeight = existingPos ? existingPos.weight : 0
+
+        // Top 3 hipotético
+        const hypothetical = analytics.positions.map(p => ({
+            ticker: p.ticker,
+            value: p.ticker === form.ticker ? p.value + opValue : p.value,
+        }))
+        if (!existingPos) hypothetical.push({ ticker: form.ticker, value: opValue })
+        const hypTotal = hypothetical.reduce((s, p) => s + p.value, 0)
+        const hypTop3 = hypothetical
+            .map(p => (p.value / hypTotal) * 100)
+            .sort((a, b) => b - a)
+            .slice(0, 3)
+            .reduce((s, w) => s + w, 0)
+
+        return {
+            type: 'buy',
+            opValue,
+            currentWeight,
+            newWeight,
+            currentTop3: analytics.top3Weight,
+            newTop3: hypTop3,
+            newTotal,
+            isNewPosition: !existingPos,
+            overweightAfter: newWeight > 15,
+        }
+    }
+
+    if (form.type === 'sell') {
+        const existingPos = analytics.positions.find(p => p.ticker === form.ticker)
+        if (!existingPos) return null
+        const sellValue = Math.min(opValue, existingPos.value)
+        const newTotal = analytics.totalValue - sellValue
+        const newPositionValue = Math.max(0, existingPos.value - sellValue)
+        const newWeight = newTotal > 0 ? (newPositionValue / newTotal) * 100 : 0
+        const realizedPnL = existingPos.avgCost > 0
+            ? (price - existingPos.avgCost) * shares
+            : 0
+
+        return {
+            type: 'sell',
+            opValue: sellValue,
+            currentWeight: existingPos.weight,
+            newWeight,
+            realizedPnL,
+            newTotal,
+        }
+    }
+
+    return null
+}
+
+export default function Operations({ operations, analytics, onOperationAdded, onOperationDeleted }) {
     const [form, setForm] = useState(emptyForm)
     const [tickerQuery, setTickerQuery] = useState('')
     const [suggestions, setSuggestions] = useState([])
@@ -25,7 +92,6 @@ export default function Operations({ operations, onOperationAdded, onOperationDe
     const [showForm, setShowForm] = useState(false)
     const suggestionsRef = useRef(null)
 
-    // Cerrar sugerencias al click fuera
     useEffect(() => {
         const handleClick = (e) => {
             if (suggestionsRef.current && !suggestionsRef.current.contains(e.target)) {
@@ -35,6 +101,11 @@ export default function Operations({ operations, onOperationAdded, onOperationDe
         document.addEventListener('mousedown', handleClick)
         return () => document.removeEventListener('mousedown', handleClick)
     }, [])
+
+    const impact = useMemo(
+        () => computeOperationImpact(analytics, form, stockSelected),
+        [analytics, form, stockSelected]
+    )
 
     const handleTickerInput = (e) => {
         const val = e.target.value.toUpperCase()
@@ -124,7 +195,6 @@ export default function Operations({ operations, onOperationAdded, onOperationDe
                 </button>
             </header>
 
-            {/* Form */}
             {showForm && (
                 <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
                     <h3 style={{ marginBottom: '1.5rem' }}>Registrar operación</h3>
@@ -309,7 +379,7 @@ export default function Operations({ operations, onOperationAdded, onOperationDe
                             {/* Total estimado */}
                             {form.shares && form.price && (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', justifyContent: 'flex-end' }}>
-                                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Total estimado</label>
+                                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Total operación</label>
                                     <div style={{
                                         padding: '0.85rem 1rem',
                                         borderRadius: '8px',
@@ -324,6 +394,50 @@ export default function Operations({ operations, onOperationAdded, onOperationDe
                                 </div>
                             )}
                         </div>
+
+                        {/* Preview de impacto en el portfolio */}
+                        {impact && (
+                            <div style={{
+                                marginTop: '1.5rem',
+                                background: 'rgba(56,189,248,0.06)',
+                                border: '1px solid rgba(56,189,248,0.2)',
+                                borderRadius: '10px',
+                                padding: '1rem 1.25rem',
+                            }}>
+                                <div style={{ fontSize: '0.82rem', color: 'var(--accent-color)', fontWeight: '600', marginBottom: '0.75rem' }}>
+                                    Impacto en portfolio si confirmas esta operación:
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem' }}>
+                                    <ImpactRow
+                                        label={`Peso ${form.ticker}`}
+                                        before={`${impact.currentWeight.toFixed(1)}%`}
+                                        after={`${impact.newWeight.toFixed(1)}%`}
+                                        warn={impact.overweightAfter}
+                                        warnMsg="Superará el 15% recomendado"
+                                    />
+                                    {impact.type === 'buy' && (
+                                        <ImpactRow
+                                            label="Concentración top 3"
+                                            before={`${impact.currentTop3.toFixed(1)}%`}
+                                            after={`${impact.newTop3.toFixed(1)}%`}
+                                            warn={impact.newTop3 > 60}
+                                            warnMsg="Top 3 superará el 60%"
+                                        />
+                                    )}
+                                    {impact.type === 'sell' && impact.realizedPnL !== 0 && (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                                            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>P&L realizado</span>
+                                            <span style={{
+                                                fontSize: '0.95rem', fontWeight: '700',
+                                                color: impact.realizedPnL >= 0 ? 'var(--success)' : 'var(--danger)',
+                                            }}>
+                                                {impact.realizedPnL >= 0 ? '+' : ''}{formatCurrency(impact.realizedPnL)}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         {error && (
                             <div style={{
@@ -353,7 +467,7 @@ export default function Operations({ operations, onOperationAdded, onOperationDe
                 </div>
             )}
 
-            {/* Operations list */}
+            {/* Lista de operaciones */}
             {operations.length === 0 ? (
                 <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
                     <PlusCircle size={40} style={{ marginBottom: '1rem', opacity: 0.4 }} />
@@ -413,6 +527,24 @@ export default function Operations({ operations, onOperationAdded, onOperationDe
                     </table>
                 </div>
             )}
+        </div>
+    )
+}
+
+function ImpactRow({ label, before, after, warn, warnMsg }) {
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{label}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.9rem', fontWeight: '600' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>{before}</span>
+                <ArrowRight size={12} color="var(--text-secondary)" />
+                <span style={{ color: warn ? 'var(--danger)' : 'var(--success)' }}>{after}</span>
+                {warn && (
+                    <span title={warnMsg} style={{ cursor: 'help' }}>
+                        <AlertTriangle size={13} color="var(--danger)" />
+                    </span>
+                )}
+            </div>
         </div>
     )
 }

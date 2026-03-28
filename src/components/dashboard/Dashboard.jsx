@@ -88,11 +88,6 @@ export default function Dashboard({ analytics, drawdown, portfolioReturn, sicavD
                 <p style={{ color: 'var(--text-secondary)' }}>Estado real del portfolio y señales de riesgo activas.</p>
             </header>
 
-            {/* SICAV NAV — barra compacta */}
-            {sicavData && sicavData.price > 0 && (
-                <SicavNavBar data={sicavData} />
-            )}
-
             {/* Alertas críticas */}
             {highAlerts.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -208,10 +203,15 @@ export default function Dashboard({ analytics, drawdown, portfolioReturn, sicavD
                 </div>
             </div>
 
-            {/* Drawdown Tracker */}
-            {drawdown && (
-                <DrawdownWidget drawdown={drawdown} totalValue={totalValue} />
-            )}
+            {/* Drawdown Tracker + SICAV NAV — misma fila */}
+            <div style={{ display: 'grid', gridTemplateColumns: drawdown && sicavData?.price > 0 ? '1fr auto' : '1fr', gap: '1.5rem', alignItems: 'stretch' }}>
+                {drawdown && (
+                    <DrawdownWidget drawdown={drawdown} totalValue={totalValue} />
+                )}
+                {sicavData && sicavData.price > 0 && (
+                    <SicavNavBar data={sicavData} />
+                )}
+            </div>
 
             {/* Benchmark comparison */}
             {portfolioReturn && (
@@ -565,38 +565,41 @@ function SicavNavBar({ data }) {
         ? v.toLocaleString('es-ES', { style: 'currency', currency: ccy, minimumFractionDigits: 2 })
         : '—';
 
-    // Posición del precio actual dentro del rango 52 semanas (0-100%)
     const range52w = high52w && low52w && high52w > low52w
         ? ((price - low52w) / (high52w - low52w)) * 100
         : null;
 
     return (
         <div className="glass-panel" style={{
-            padding: '0.75rem 1.25rem',
+            padding: '1.5rem',
             display: 'flex',
-            alignItems: 'center',
-            gap: '1rem',
-            flexWrap: 'wrap',
-            fontSize: '0.85rem',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            gap: '0.75rem',
+            minWidth: '200px',
         }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
-                <Landmark size={15} color="var(--accent-color)" />
-                <span style={{ fontWeight: '700', color: 'var(--accent-color)' }}>Invervillada SICAV</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Landmark size={16} color="var(--accent-color)" />
+                <span style={{ fontWeight: '600', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Invervillada SICAV</span>
             </div>
 
-            <span style={{ fontWeight: '700', fontSize: '1rem' }}>{formatNav(price)}</span>
+            <div style={{ fontSize: '1.5rem', fontWeight: '700' }}>{formatNav(price)}</div>
 
-            <span style={{ color, fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                {isUp ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
+            <div style={{ color, fontWeight: '600', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                {isUp ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
                 {changeAmount != null && (isUp ? '+' : '') + changeAmount.toFixed(2)}
                 {changePercent != null && ` (${isUp ? '+' : ''}${changePercent.toFixed(2)}%)`}
-            </span>
+            </div>
 
             {high52w != null && low52w != null && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto', color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
-                    <span>52s: {formatNav(low52w)}</span>
+                <div style={{ marginTop: '0.25rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: '0.3rem' }}>
+                        <span>{formatNav(low52w)}</span>
+                        <span style={{ fontSize: '0.68rem' }}>Rango 52 sem.</span>
+                        <span>{formatNav(high52w)}</span>
+                    </div>
                     {range52w != null && (
-                        <div style={{ width: '60px', height: '5px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', overflow: 'hidden', position: 'relative' }}>
+                        <div style={{ height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', overflow: 'hidden' }}>
                             <div style={{
                                 height: '100%',
                                 width: `${Math.min(100, Math.max(0, range52w))}%`,
@@ -605,7 +608,6 @@ function SicavNavBar({ data }) {
                             }} />
                         </div>
                     )}
-                    <span>{formatNav(high52w)}</span>
                 </div>
             )}
         </div>

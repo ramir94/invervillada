@@ -19,7 +19,7 @@ const navItems = [
     { id: 'simulator', label: 'Stress Test', icon: ShieldAlert },
 ]
 
-// Ticker Morningstar de la propia SICAV — se pide junto con los holdings
+// Ticker de la propia SICAV en BME (Bolsa de Madrid)
 const SICAV_TICKER = '0P00011NA7'
 
 export default function DashboardApp() {

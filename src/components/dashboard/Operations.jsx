@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
-import { PlusCircle, Trash2, TrendingUp, TrendingDown, Search, AlertTriangle, ArrowRight, ChevronUp, ChevronDown, ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import { PlusCircle, Trash2, TrendingUp, TrendingDown, Search, AlertTriangle, ArrowRight, ChevronUp, ChevronDown, ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight, X, Loader2 } from 'lucide-react'
 
 const PAGE_SIZE = 10
 import { addOperation, deleteOperation } from '../../services/operations'
 import { searchStocks } from '../../data/stockCatalog'
+import { searchTickers } from '../../services/tickerSearch'
 import { formatCurrency } from '../../utils/formatting'
 
 const emptyForm = {
@@ -117,13 +118,40 @@ export default function Operations({ operations, analytics, onOperationAdded, on
         [analytics, form, stockSelected]
     )
 
-    const handleTickerInput = (e) => {
+    const [searching, setSearching] = useState(false)
+    const searchTimeoutRef = useRef(null)
+
+    const handleTickerInput = useCallback((e) => {
         const val = e.target.value.toUpperCase()
         setTickerQuery(val)
         setStockSelected(false)
         setForm(prev => ({ ...prev, ticker: val, company_name: '', sector: '', currency: 'USD' }))
-        setSuggestions(val.length >= 1 ? searchStocks(val) : [])
-    }
+
+        // Primero: resultados inmediatos del catálogo local
+        const localResults = val.length >= 1 ? searchStocks(val) : []
+        setSuggestions(localResults.map(s => ({ ...s, source: 'catalog' })))
+
+        // Luego: buscar en Yahoo Finance (debounced 400ms)
+        if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
+        if (val.length >= 2) {
+            setSearching(true)
+            searchTimeoutRef.current = setTimeout(async () => {
+                const remoteResults = await searchTickers(val)
+                // Merge: catálogo primero, luego Yahoo (sin duplicados)
+                const localTickers = new Set(localResults.map(s => s.ticker))
+                const merged = [
+                    ...localResults.map(s => ({ ...s, source: 'catalog' })),
+                    ...remoteResults
+                        .filter(r => !localTickers.has(r.ticker))
+                        .map(r => ({ ...r, source: 'yahoo' })),
+                ]
+                setSuggestions(merged)
+                setSearching(false)
+            }, 400)
+        } else {
+            setSearching(false)
+        }
+    }, [])
 
     const selectStock = (stock) => {
         setTickerQuery(stock.ticker)
@@ -131,16 +159,9 @@ export default function Operations({ operations, analytics, onOperationAdded, on
             ...prev,
             ticker: stock.ticker,
             company_name: stock.name,
-            sector: stock.sector,
-            currency: stock.currency,
+            sector: stock.sector || '',
+            currency: stock.currency || 'USD',
         }))
-        setStockSelected(true)
-        setSuggestions([])
-    }
-
-    // Permite usar un ticker personalizado (ETFs, acciones no listadas en el catálogo)
-    const useCustomTicker = () => {
-        setForm(prev => ({ ...prev, ticker: tickerQuery }))
         setStockSelected(true)
         setSuggestions([])
     }
@@ -151,12 +172,8 @@ export default function Operations({ operations, analytics, onOperationAdded, on
 
     const handleSubmit = async (e) => {
         e.preventDefault()
-        if (!form.ticker || form.ticker.length < 1) {
-            setError('Introduce un ticker válido.')
-            return
-        }
-        if (!stockSelected && !form.company_name) {
-            setError('Introduce el nombre de la empresa o ETF.')
+        if (!stockSelected || !form.ticker) {
+            setError('Selecciona un activo del desplegable.')
             return
         }
         setError(null)
@@ -268,7 +285,7 @@ export default function Operations({ operations, analytics, onOperationAdded, on
                                     required
                                     autoComplete="off"
                                 />
-                                {(suggestions.length > 0 || (tickerQuery.length >= 2 && !stockSelected)) && (
+                                {(suggestions.length > 0 || searching) && (
                                     <div style={{
                                         position: 'absolute',
                                         top: '100%',
@@ -279,11 +296,13 @@ export default function Operations({ operations, analytics, onOperationAdded, on
                                         borderRadius: '8px',
                                         overflow: 'hidden',
                                         zIndex: 100,
-                                        boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
+                                        boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                                        maxHeight: '320px',
+                                        overflowY: 'auto',
                                     }}>
                                         {suggestions.map(s => (
                                             <div
-                                                key={s.ticker}
+                                                key={`${s.ticker}-${s.source ?? ''}`}
                                                 onClick={() => selectStock(s)}
                                                 style={{
                                                     padding: '0.75rem 1rem',
@@ -297,95 +316,81 @@ export default function Operations({ operations, analytics, onOperationAdded, on
                                                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(56,189,248,0.1)'}
                                                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                             >
-                                                <div>
+                                                <div style={{ minWidth: 0 }}>
                                                     <span style={{ fontWeight: '700', color: 'var(--accent-color)', marginRight: '0.75rem' }}>{s.ticker}</span>
                                                     <span style={{ color: 'var(--text-primary)', fontSize: '0.9rem' }}>{s.name}</span>
                                                 </div>
-                                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{s.sector}</span>
+                                                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexShrink: 0, marginLeft: '0.5rem' }}>
+                                                    {s.type && s.type !== 'EQUITY' && (
+                                                        <span style={{
+                                                            fontSize: '0.68rem', fontWeight: '600',
+                                                            background: 'rgba(129,140,248,0.15)',
+                                                            color: '#818cf8',
+                                                            padding: '0.1rem 0.35rem',
+                                                            borderRadius: '4px',
+                                                        }}>{s.type}</span>
+                                                    )}
+                                                    {s.exchange && (
+                                                        <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{s.exchange}</span>
+                                                    )}
                                                     <span style={{
-                                                        fontSize: '0.75rem',
+                                                        fontSize: '0.72rem',
                                                         background: 'rgba(255,255,255,0.07)',
-                                                        padding: '0.1rem 0.4rem',
+                                                        padding: '0.1rem 0.35rem',
                                                         borderRadius: '4px',
                                                         color: 'var(--text-secondary)'
                                                     }}>{s.currency}</span>
                                                 </div>
                                             </div>
                                         ))}
-                                        {/* Opción para usar ticker manual (ETFs, fondos, etc.) */}
-                                        {tickerQuery.length >= 2 && (
-                                            <div
-                                                onClick={useCustomTicker}
-                                                style={{
-                                                    padding: '0.75rem 1rem',
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '0.5rem',
-                                                    transition: 'background 0.15s',
-                                                    borderTop: suggestions.length > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none',
-                                                    color: 'var(--accent-color)',
-                                                }}
-                                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(56,189,248,0.1)'}
-                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                            >
-                                                <PlusCircle size={14} />
-                                                <span style={{ fontSize: '0.88rem' }}>
-                                                    Usar <strong>{tickerQuery}</strong> como ticker personalizado (ETF, fondo, etc.)
-                                                </span>
+                                        {searching && (
+                                            <div style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                                <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                                                Buscando en mercados globales...
+                                            </div>
+                                        )}
+                                        {!searching && suggestions.length === 0 && tickerQuery.length >= 2 && (
+                                            <div style={{ padding: '0.75rem 1rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                                No se encontraron resultados para "{tickerQuery}"
                                             </div>
                                         )}
                                     </div>
                                 )}
                             </div>
 
-                            {/* Empresa — editable para tickers manuales */}
+                            {/* Empresa (auto-filled) */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Empresa *</label>
+                                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Empresa</label>
                                 <input
                                     className="login-input"
-                                    name="company_name"
                                     value={form.company_name}
-                                    onChange={handleChange}
-                                    placeholder={stockSelected && form.company_name ? form.company_name : 'Nombre del activo'}
-                                    required
+                                    readOnly
+                                    placeholder="Se rellena al seleccionar"
+                                    style={{ opacity: stockSelected ? 1 : 0.5, cursor: 'default' }}
                                 />
                             </div>
 
-                            {/* Sector — editable para tickers manuales */}
+                            {/* Sector (auto-filled) */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                                 <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Sector</label>
-                                <select
+                                <input
                                     className="login-input"
-                                    name="sector"
                                     value={form.sector}
-                                    onChange={handleChange}
-                                    style={{ cursor: 'pointer' }}
-                                >
-                                    <option value="">Seleccionar sector</option>
-                                    {['Health Care','Technology','Consumer Discretionary','Consumer Staples','Financials','Industrials','Energy','Real Estate','Communication Services','Utilities','Materials'].map(s => (
-                                        <option key={s} value={s}>{s}</option>
-                                    ))}
-                                    <option value="ETF">ETF / Fondo</option>
-                                </select>
+                                    readOnly
+                                    placeholder="Se rellena al seleccionar"
+                                    style={{ opacity: stockSelected ? 1 : 0.5, cursor: 'default' }}
+                                />
                             </div>
 
-                            {/* Divisa — editable para tickers manuales */}
+                            {/* Divisa (auto-filled) */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                                 <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Divisa</label>
-                                <select
+                                <input
                                     className="login-input"
-                                    name="currency"
                                     value={form.currency}
-                                    onChange={handleChange}
-                                    style={{ cursor: 'pointer' }}
-                                >
-                                    <option value="USD">USD</option>
-                                    <option value="EUR">EUR</option>
-                                    <option value="GBP">GBP</option>
-                                    <option value="CHF">CHF</option>
-                                </select>
+                                    readOnly
+                                    style={{ opacity: stockSelected ? 1 : 0.5, cursor: 'default' }}
+                                />
                             </div>
 
                             {/* Acciones */}

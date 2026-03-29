@@ -590,8 +590,13 @@ function SicavNavBar({ data }) {
         ? v.toLocaleString('es-ES', { style: 'currency', currency: ccy, minimumFractionDigits: 2 })
         : '—';
 
-    const range52w = high52w && low52w && high52w > low52w
-        ? ((price - low52w) / (high52w - low52w)) * 100
+    // Corregir rango 52s con el precio actual (Yahoo puede reportar datos incorrectos para tickers ilíquidos)
+    const realHigh = high52w != null ? Math.max(high52w, price) : null;
+    const realLow = low52w != null ? Math.min(low52w, price) : null;
+    const hasValidRange = realHigh != null && realLow != null && realHigh > realLow;
+
+    const range52w = hasValidRange
+        ? ((price - realLow) / (realHigh - realLow)) * 100
         : null;
 
     return (
@@ -616,12 +621,12 @@ function SicavNavBar({ data }) {
                 {changePercent != null && ` (${isUp ? '+' : ''}${changePercent.toFixed(2)}%)`}
             </div>
 
-            {high52w != null && low52w != null && (
+            {hasValidRange && (
                 <div style={{ marginTop: '0.25rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: '0.3rem' }}>
-                        <span>{formatNav(low52w)}</span>
+                        <span>{formatNav(realLow)}</span>
                         <span style={{ fontSize: '0.68rem' }}>Rango 52 sem.</span>
-                        <span>{formatNav(high52w)}</span>
+                        <span>{formatNav(realHigh)}</span>
                     </div>
                     {range52w != null && (
                         <div style={{ height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', overflow: 'hidden' }}>

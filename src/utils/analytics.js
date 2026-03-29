@@ -26,6 +26,7 @@ const SECTOR_FACTOR = {
     'Financials': 'dividend',
     'Industrials': 'cyclical',
     'Materials': 'cyclical',
+    'ETF': 'other',
 };
 
 const INTERNATIONAL_TICKERS = new Set([

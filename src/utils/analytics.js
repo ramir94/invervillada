@@ -73,11 +73,149 @@ export const calculateCostBasis = (operations) => {
     return result;
 };
 
+// Calcula distribución por clase de activo
+export const calculateAssetAllocation = (positions) => {
+    const totalValue = positions.reduce((s, p) => s + p.value, 0);
+    if (totalValue === 0) return { equity: 0, bond: 0, cash: 0 };
+
+    const groups = { equity: 0, bond: 0, cash: 0 };
+    positions.forEach(p => {
+        const type = p.asset_type ?? 'equity';
+        if (type === 'bond' || type === 'bond_etf') {
+            groups.bond += p.value;
+        } else if (type === 'cash') {
+            groups.cash += p.value;
+        } else {
+            groups.equity += p.value;
+        }
+    });
+
+    return {
+        equity: (groups.equity / totalValue) * 100,
+        bond: (groups.bond / totalValue) * 100,
+        cash: (groups.cash / totalValue) * 100,
+    };
+};
+
+// Calcula métricas específicas de renta fija
+export const calculateFixedIncomeMetrics = (positions) => {
+    const bondPositions = positions.filter(p =>
+        p.asset_type === 'bond' || p.asset_type === 'bond_etf'
+    );
+    if (bondPositions.length === 0) return null;
+
+    const totalBondValue = bondPositions.reduce((s, p) => s + p.value, 0);
+    if (totalBondValue === 0) return null;
+
+    // Duración del portfolio: suma ponderada de duraciones individuales
+    const portfolioDuration = bondPositions.reduce((s, p) => {
+        const w = p.value / totalBondValue;
+        return s + w * (p.duration ?? 0);
+    }, 0);
+
+    // TIR media ponderada en compra
+    const weightedYTM = bondPositions.reduce((s, p) => {
+        const w = p.value / totalBondValue;
+        return s + w * (p.ytm_at_purchase ?? 0);
+    }, 0);
+
+    // Distribución por rating
+    const ratingDistribution = {};
+    bondPositions.forEach(p => {
+        const r = p.rating ?? 'NR';
+        ratingDistribution[r] = (ratingDistribution[r] ?? 0) + (p.value / totalBondValue) * 100;
+    });
+
+    // Distribución por vencimiento
+    const now = new Date();
+    const maturityDistribution = { '<1Y': 0, '1-3Y': 0, '3-5Y': 0, '>5Y': 0 };
+    bondPositions.forEach(p => {
+        const pct = (p.value / totalBondValue) * 100;
+        if (!p.maturity_date) {
+            maturityDistribution['1-3Y'] += pct;
+            return;
+        }
+        const yearsToMaturity = (new Date(p.maturity_date) - now) / (1000 * 60 * 60 * 24 * 365.25);
+        if (yearsToMaturity < 1) maturityDistribution['<1Y'] += pct;
+        else if (yearsToMaturity < 3) maturityDistribution['1-3Y'] += pct;
+        else if (yearsToMaturity < 5) maturityDistribution['3-5Y'] += pct;
+        else maturityDistribution['>5Y'] += pct;
+    });
+
+    return {
+        portfolioDuration,
+        weightedYTM,
+        ratingDistribution,
+        maturityDistribution,
+        totalBondValue,
+        bondCount: bondPositions.length,
+    };
+};
+
 // Calcula todas las métricas derivadas del portfolio
 export const calculatePortfolioMetrics = (holdings, marketData, costBasis) => {
     if (!holdings.length || !marketData) return null;
 
     const positions = holdings.map(h => {
+        const assetType = h.asset_type ?? 'equity';
+
+        // ── LIQUIDEZ ──────────────────────────────────────────────────────────
+        if (assetType === 'cash') {
+            const nominal = Number(h.shares);
+            return {
+                ...h,
+                currentPrice: 1.0,
+                value: nominal,
+                avgCost: 1.0,
+                unrealizedPnL: 0,
+                unrealizedPnLPct: 0,
+                dailyChange: 0,
+                dailyChangePct: 0,
+                beta: 0,
+                annualYield: 0,
+                annualIncome: 0,
+                factor: 'cash',
+                isInternational: false,
+                weight: 0,
+                riskContribution: 0,
+                contributionToReturn: 0,
+            };
+        }
+
+        // ── BONO INDIVIDUAL ───────────────────────────────────────────────────
+        if (assetType === 'bond') {
+            const liveData = marketData[h.ticker];
+            // Jerarquía: precio live (Yahoo Finance) → último guardado en DB → par (100)
+            const marketPrice = liveData?.price ?? h.market_price ?? 100;
+            const nominal = Number(h.shares);  // shares = nominal en €
+            const value = nominal * marketPrice / 100;
+            const acquisitionPrice = costBasis[h.ticker] ?? 100;
+            const costValue = nominal * acquisitionPrice / 100;
+            const unrealizedPnL = value - costValue;
+            const unrealizedPnLPct = costValue > 0 ? (unrealizedPnL / costValue) * 100 : 0;
+            const annualIncome = h.coupon_rate ? (h.coupon_rate / 100) * nominal : 0;
+
+            return {
+                ...h,
+                currentPrice: marketPrice,
+                value,
+                avgCost: acquisitionPrice,
+                unrealizedPnL,
+                unrealizedPnLPct,
+                dailyChange: liveData ? (liveData.changePercent / 100) * value : 0,
+                dailyChangePct: liveData?.changePercent ?? 0,
+                beta: 0,
+                annualYield: h.coupon_rate ?? 0,
+                annualIncome,
+                factor: 'fixed_income',
+                isInternational: h.currency !== 'EUR',
+                weight: 0,
+                riskContribution: 0,
+                contributionToReturn: 0,
+            };
+        }
+
+        // ── EQUITY y ETF RF ───────────────────────────────────────────────────
         const data = marketData[h.ticker];
         if (!data) return null;
         const currentPrice = data.price;
@@ -85,7 +223,7 @@ export const calculatePortfolioMetrics = (holdings, marketData, costBasis) => {
         const avgCost = costBasis[h.ticker] ?? currentPrice;
         const unrealizedPnL = (currentPrice - avgCost) * h.shares;
         const unrealizedPnLPct = avgCost > 0 ? (currentPrice / avgCost - 1) * 100 : 0;
-        const beta = estimateBeta(h.ticker, h.sector);
+        const beta = assetType === 'bond_etf' ? 0.3 : estimateBeta(h.ticker, h.sector);
         const annualYield = data.yield ?? 0;
         const annualIncome = (annualYield / 100) * value;
         return {
@@ -100,7 +238,7 @@ export const calculatePortfolioMetrics = (holdings, marketData, costBasis) => {
             beta,
             annualYield,
             annualIncome,
-            factor: SECTOR_FACTOR[h.sector] ?? 'other',
+            factor: assetType === 'bond_etf' ? 'fixed_income' : (SECTOR_FACTOR[h.sector] ?? 'other'),
             isInternational: INTERNATIONAL_TICKERS.has(h.ticker),
             weight: 0,
             riskContribution: 0,
@@ -135,6 +273,7 @@ export const calculatePortfolioMetrics = (holdings, marketData, costBasis) => {
     // HHI: 0 = diversificación perfecta, 10000 = 1 activo
     const hhi = positions.reduce((s, p) => s + p.weight ** 2, 0);
 
+    // Beta del portfolio: solo posiciones con beta != 0 (excluye bonos y cash)
     const portfolioBeta = positions.reduce((s, p) => s + (p.weight / 100) * p.beta, 0);
 
     const factorExposure = {};
@@ -146,7 +285,10 @@ export const calculatePortfolioMetrics = (holdings, marketData, costBasis) => {
         .filter(p => p.isInternational)
         .reduce((s, p) => s + p.weight, 0);
 
-    const alerts = buildAlerts(positions, top3Weight, portfolioBeta, currencyExposure);
+    const assetAllocation = calculateAssetAllocation(positions);
+    const fixedIncomeMetrics = calculateFixedIncomeMetrics(positions);
+
+    const alerts = buildAlerts(positions, top3Weight, portfolioBeta, currencyExposure, fixedIncomeMetrics);
     const healthScore = computeHealthScore({ hhi, top3Weight, portfolioBeta, totalUnrealizedPnL, totalValue });
 
     const costBasisTotal = positions.reduce((s, p) => s + p.avgCost * p.shares, 0);
@@ -170,13 +312,16 @@ export const calculatePortfolioMetrics = (holdings, marketData, costBasis) => {
         internationalWeight,
         alerts,
         healthScore,
+        assetAllocation,
+        fixedIncomeMetrics,
     };
 };
 
-const buildAlerts = (positions, top3Weight, portfolioBeta, currencyExposure = {}) => {
+const buildAlerts = (positions, top3Weight, portfolioBeta, currencyExposure = {}, fixedIncomeMetrics = null) => {
     const alerts = [];
 
-    positions.filter(p => p.weight > 15).forEach(p => {
+    // Solo aplica overweight a equity (no tiene sentido para bonos individuales con nominal fijo)
+    positions.filter(p => p.weight > 15 && (p.asset_type === 'equity' || !p.asset_type)).forEach(p => {
         alerts.push({
             type: 'overweight',
             severity: 'high',
@@ -225,6 +370,43 @@ const buildAlerts = (positions, top3Weight, portfolioBeta, currencyExposure = {}
             message: `${topCcyEntry[1].toFixed(0)}% del portfolio en ${topCcyEntry[0]} — concentración de divisa elevada`,
             action: 'Considera añadir activos en otras divisas para reducir el riesgo de tipo de cambio',
         });
+    }
+
+    // ── Alertas de renta fija ─────────────────────────────────────────────────
+    if (fixedIncomeMetrics) {
+        const { portfolioDuration, ratingDistribution, maturityDistribution } = fixedIncomeMetrics;
+
+        if (portfolioDuration > 5) {
+            alerts.push({
+                type: 'duration_risk',
+                severity: 'medium',
+                ticker: null,
+                message: `Duración de la cartera RF: ${portfolioDuration.toFixed(2)} años — alta sensibilidad a subidas de tipos`,
+                action: 'Considera reducir la duración con bonos a corto plazo o instrumentos a tipo variable',
+            });
+        }
+
+        const lowRatingPct = (ratingDistribution['B'] ?? 0) + (ratingDistribution['BB'] ?? 0);
+        if (lowRatingPct > 30) {
+            alerts.push({
+                type: 'credit_risk',
+                severity: 'high',
+                ticker: null,
+                message: `${lowRatingPct.toFixed(0)}% de la RF en rating B/BB — riesgo crediticio elevado`,
+                action: 'Aumenta la calidad crediticia de la cartera de renta fija',
+            });
+        }
+
+        const maxBucketEntry = Object.entries(maturityDistribution).sort((a, b) => b[1] - a[1])[0];
+        if (maxBucketEntry && maxBucketEntry[1] > 70) {
+            alerts.push({
+                type: 'maturity_concentration',
+                severity: 'medium',
+                ticker: null,
+                message: `${maxBucketEntry[1].toFixed(0)}% de la RF vence en el bucket ${maxBucketEntry[0]} — concentración de vencimiento`,
+                action: 'Distribuye los vencimientos para gestionar el riesgo de reinversión',
+            });
+        }
     }
 
     return alerts;

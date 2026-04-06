@@ -37,31 +37,41 @@ export default function DashboardApp() {
             setOperations(ops)
             setSnapshots(snaps)
 
-            const tickers = [...new Set(ops.map(op => op.ticker)), SICAV_TICKER]
-            const market = await getMarketData(tickers)
+            const tickerItems = [
+                ...ops.map(op => ({ ticker: op.ticker, asset_type: op.asset_type ?? 'equity' })),
+                { ticker: SICAV_TICKER, asset_type: 'equity' },
+            ]
+            const market = await getMarketData(tickerItems)
             setMarketData(market)
             setLoading(false)
         }
         init()
     }, [])
 
-    // Lista de tickers únicos actuales — cambia cuando el usuario añade/elimina operaciones
-    const tickerList = useMemo(
-        () => [...new Set(operations.map(op => op.ticker))],
-        [operations]
-    )
+    // Lista de ticker items únicos actuales — cambia cuando el usuario añade/elimina operaciones
+    const tickerItems = useMemo(() => {
+        const seen = new Set()
+        const items = []
+        operations.forEach(op => {
+            if (!seen.has(op.ticker)) {
+                seen.add(op.ticker)
+                items.push({ ticker: op.ticker, asset_type: op.asset_type ?? 'equity' })
+            }
+        })
+        return items
+    }, [operations])
 
     // Refrescar precios cada 30 segundos (tickers cartera + SICAV)
     useEffect(() => {
-        if (!tickerList.length) return
-        const allTickers = [...tickerList, SICAV_TICKER]
+        if (!tickerItems.length) return
+        const allItems = [...tickerItems, { ticker: SICAV_TICKER, asset_type: 'equity' }]
         const interval = setInterval(() => {
-            getMarketData(allTickers).then(data => {
+            getMarketData(allItems).then(data => {
                 if (Object.keys(data).length > 0) setMarketData(data)
             })
         }, 30000)
         return () => clearInterval(interval)
-    }, [tickerList])
+    }, [tickerItems])
 
     const holdings = useMemo(() => buildHoldingsFromOperations(operations), [operations])
     const costBasis = useMemo(() => calculateCostBasis(operations), [operations])
@@ -101,7 +111,7 @@ export default function DashboardApp() {
         setOperations(prev => [op, ...prev])
         // Si es un ticker nuevo, obtener su precio inmediatamente
         if (!marketData || !marketData[op.ticker]) {
-            const newData = await getMarketData([op.ticker])
+            const newData = await getMarketData([{ ticker: op.ticker, asset_type: op.asset_type ?? 'equity' }])
             if (Object.keys(newData).length > 0) {
                 setMarketData(prev => ({ ...(prev ?? {}), ...newData }))
             }

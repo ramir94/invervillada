@@ -12,8 +12,22 @@ const FACTOR_LABELS = {
     defensive: 'Defensivo',
     dividend: 'Dividendo / Value',
     cyclical: 'Cíclico',
+    fixed_income: 'Renta Fija',
+    cash: 'Liquidez',
     other: 'Otros',
 };
+
+const RATING_COLORS = {
+    'AAA': '#22c55e',
+    'AA': '#4ade80',
+    'A': '#38bdf8',
+    'BBB': '#eab308',
+    'BB': '#f97316',
+    'B': '#ef4444',
+    'NR': '#94a3b8',
+};
+
+const MATURITY_COLORS = ['#38bdf8', '#818cf8', '#eab308', '#f97316'];
 
 const FACTOR_COLORS = {
     growth: '#818cf8',
@@ -64,7 +78,36 @@ export default function Dashboard({ analytics, drawdown, portfolioReturn, sicavD
         totalAnnualIncome, portfolioYield,
         top3Weight, top3, portfolioBeta,
         factorExposure, currencyExposure, healthScore, alerts, positions,
+        assetAllocation, fixedIncomeMetrics,
     } = analytics;
+
+    const hasMultipleAssetTypes = assetAllocation && [assetAllocation.equity, assetAllocation.bond, assetAllocation.cash].filter(v => v > 0.5).length > 1;
+
+    const assetAllocationChartData = hasMultipleAssetTypes ? (() => {
+        const labels = [], data = [], colors = [];
+        if (assetAllocation.equity > 0.5) { labels.push('Renta Variable'); data.push(assetAllocation.equity); colors.push('#22c55e'); }
+        if (assetAllocation.bond > 0.5) { labels.push('Renta Fija'); data.push(assetAllocation.bond); colors.push('#818cf8'); }
+        if (assetAllocation.cash > 0.5) { labels.push('Liquidez'); data.push(assetAllocation.cash); colors.push('#eab308'); }
+        return { labels, datasets: [{ data, backgroundColor: colors, borderColor: '#1e293b', borderWidth: 2 }] };
+    })() : null;
+
+    const ratingChartData = fixedIncomeMetrics?.ratingDistribution ? (() => {
+        const entries = Object.entries(fixedIncomeMetrics.ratingDistribution).filter(([, v]) => v > 0.1);
+        return {
+            labels: entries.map(([k]) => k),
+            datasets: [{ data: entries.map(([, v]) => v), backgroundColor: entries.map(([k]) => RATING_COLORS[k] ?? '#94a3b8'), borderColor: '#1e293b', borderWidth: 2 }],
+        };
+    })() : null;
+
+    const maturityChartData = fixedIncomeMetrics?.maturityDistribution ? (() => {
+        const entries = Object.entries(fixedIncomeMetrics.maturityDistribution).filter(([, v]) => v > 0.1);
+        return {
+            labels: entries.map(([k]) => k),
+            datasets: [{ data: entries.map(([, v]) => v), backgroundColor: MATURITY_COLORS.slice(0, entries.length), borderColor: '#1e293b', borderWidth: 2 }],
+        };
+    })() : null;
+
+    const doughnutOptions = { plugins: { legend: { position: 'right', labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 12 } } }, maintainAspectRatio: false };
 
     const scoreColor = healthScore.score >= 70
         ? 'var(--success)'
@@ -193,7 +236,7 @@ export default function Dashboard({ analytics, drawdown, portfolioReturn, sicavD
                                 }}>
                                     {portfolioYield.toFixed(2)}%
                                 </span>
-                                {' '}· vía dividendos
+                                {' '}· dividendos y cupones
                             </div>
                         </div>
                         <div style={{ padding: '10px', background: 'rgba(34,197,94,0.1)', borderRadius: '12px' }}>
@@ -201,6 +244,31 @@ export default function Dashboard({ analytics, drawdown, portfolioReturn, sicavD
                         </div>
                     </div>
                 </div>
+
+                {/* Duración Portfolio — solo si hay RF */}
+                {fixedIncomeMetrics && (
+                    <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div>
+                                <h3 style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Duración Portfolio RF</h3>
+                                <div style={{ fontSize: '2rem', fontWeight: 'bold', marginTop: '0.5rem', color: '#818cf8' }}>
+                                    {fixedIncomeMetrics.portfolioDuration.toFixed(2)}
+                                    <span style={{ fontSize: '1rem', color: 'var(--text-secondary)', fontWeight: '400' }}> años</span>
+                                </div>
+                                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
+                                    TIR media:{' '}
+                                    <span style={{ color: 'var(--success)', fontWeight: '600' }}>
+                                        {fixedIncomeMetrics.weightedYTM.toFixed(2)}%
+                                    </span>
+                                    {' '}· {fixedIncomeMetrics.bondCount} posiciones RF
+                                </div>
+                            </div>
+                            <div style={{ padding: '10px', background: 'rgba(129,140,248,0.1)', borderRadius: '12px' }}>
+                                <Landmark color="#818cf8" size={24} />
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Drawdown Tracker + SICAV NAV — misma fila */}
@@ -380,6 +448,58 @@ export default function Dashboard({ analytics, drawdown, portfolioReturn, sicavD
                     </div>
                 )}
             </div>
+
+            {/* Distribución por clase de activo — solo si hay >1 tipo */}
+            {hasMultipleAssetTypes && assetAllocationChartData && (
+                <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                    <h3 style={{ marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Landmark size={16} color="#818cf8" />
+                        Distribución por Clase de Activo
+                    </h3>
+                    <div style={{ height: '220px', display: 'flex', justifyContent: 'center' }}>
+                        <Doughnut data={assetAllocationChartData} options={doughnutOptions} />
+                    </div>
+                    <div style={{ display: 'flex', gap: '1.5rem', justifyContent: 'center', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                        {[['Renta Variable', assetAllocation.equity, '#22c55e'], ['Renta Fija', assetAllocation.bond, '#818cf8'], ['Liquidez', assetAllocation.cash, '#eab308']].filter(([, v]) => v > 0.5).map(([label, value, color]) => (
+                            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.83rem' }}>
+                                <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: color, flexShrink: 0 }} />
+                                <span style={{ color: 'var(--text-secondary)' }}>{label}:</span>
+                                <span style={{ color, fontWeight: '700' }}>{value.toFixed(1)}%</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Sección de Renta Fija — solo si hay posiciones RF */}
+            {fixedIncomeMetrics && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0' }}>
+                        <Landmark size={18} color="#818cf8" />
+                        Renta Fija
+                    </h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.5rem' }}>
+                        {/* Rating */}
+                        {ratingChartData && (
+                            <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                                <h3 style={{ marginBottom: '0.35rem', fontSize: '0.95rem' }}>Distribución por Rating</h3>
+                                <div style={{ height: '200px', display: 'flex', justifyContent: 'center' }}>
+                                    <Doughnut data={ratingChartData} options={doughnutOptions} />
+                                </div>
+                            </div>
+                        )}
+                        {/* Vencimiento */}
+                        {maturityChartData && (
+                            <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                                <h3 style={{ marginBottom: '0.35rem', fontSize: '0.95rem' }}>Distribución por Vencimiento</h3>
+                                <div style={{ height: '200px', display: 'flex', justifyContent: 'center' }}>
+                                    <Doughnut data={maturityChartData} options={doughnutOptions} />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Sector doughnut — secundario */}
             <div className="glass-panel" style={{ padding: '1.5rem' }}>

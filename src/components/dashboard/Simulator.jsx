@@ -7,10 +7,12 @@ import { calculateRebalancingNeeds, estimateRebalancingCost, saveTargetWeights, 
 const ALL_SCENARIOS = getScenarios();
 
 const SCENARIO_META = {
-    crisis_2008: { color: '#f43f5e', icon: TrendingDown },
-    covid_2020: { color: '#d946ef', icon: TrendingDown },
-    tech_crash_2022: { color: '#f97316', icon: TrendingDown },
-    correction_10: { color: '#eab308', icon: TrendingDown },
+    crisis_2008:      { color: '#f43f5e', icon: TrendingDown },
+    covid_2020:       { color: '#d946ef', icon: TrendingDown },
+    tech_crash_2022:  { color: '#f97316', icon: TrendingDown },
+    correction_10:    { color: '#eab308', icon: TrendingDown },
+    rate_hike_100bp:  { color: '#38bdf8', icon: TrendingDown },
+    credit_crisis:    { color: '#a855f7', icon: TrendingDown },
 };
 
 export default function Simulator({ analytics }) {
@@ -190,6 +192,37 @@ export default function Simulator({ analytics }) {
                                     <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>meses estimados</div>
                                 </div>
                             </div>
+
+                            {/* Desglose por clase de activo */}
+                            {result.impactByAssetClass && Object.keys(result.impactByAssetClass).length > 1 && (
+                                <div className="glass-panel" style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
+                                    <h4 style={{ marginBottom: '1rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Impacto por clase de activo</h4>
+                                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                                        {Object.entries(result.impactByAssetClass).map(([cls, data]) => {
+                                            const label = cls === 'equity' ? 'Renta Variable' : cls === 'bond' ? 'Renta Fija' : 'Liquidez';
+                                            const color = cls === 'equity' ? '#22c55e' : cls === 'bond' ? '#a855f7' : '#eab308';
+                                            const shockPct = data.value > 0 ? (data.impact / data.value) * 100 : 0;
+                                            return (
+                                                <div key={cls} style={{
+                                                    flex: '1 1 160px',
+                                                    background: 'rgba(255,255,255,0.03)',
+                                                    border: `1px solid ${color}33`,
+                                                    borderRadius: '8px',
+                                                    padding: '0.9rem 1rem',
+                                                }}>
+                                                    <div style={{ fontSize: '0.78rem', color, fontWeight: '600', marginBottom: '0.4rem' }}>{label}</div>
+                                                    <div style={{ fontSize: '1.1rem', fontWeight: '700', color: data.impact >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                                                        {data.impact >= 0 ? '+' : ''}{formatCurrency(data.impact)}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                                                        {shockPct >= 0 ? '+' : ''}{shockPct.toFixed(1)}% · {formatCurrency(data.value)} expuesto
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Descripción del escenario */}
                             <div style={{

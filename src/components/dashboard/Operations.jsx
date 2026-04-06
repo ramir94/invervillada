@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
-import { PlusCircle, Trash2, TrendingUp, TrendingDown, Search, AlertTriangle, ArrowRight, ChevronUp, ChevronDown, ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight, X, Loader2 } from 'lucide-react'
+import { PlusCircle, Trash2, TrendingUp, TrendingDown, Search, AlertTriangle, ArrowRight, ChevronUp, ChevronDown, ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight, X, Loader2, Landmark, DollarSign, BarChart2 } from 'lucide-react'
 
 const PAGE_SIZE = 10
 import { addOperation, deleteOperation } from '../../services/operations'
@@ -16,16 +16,35 @@ const emptyForm = {
     price: '',
     currency: 'USD',
     date: new Date().toISOString().split('T')[0],
+    // Campos de renta fija
+    isin: '',
+    maturity_date: '',
+    coupon_rate: '',
+    rating: '',
+    duration: '',
+    ytm_at_purchase: '',
 }
 
+const ASSET_TYPES = [
+    { id: 'equity', label: 'Renta Variable', icon: TrendingUp, color: 'var(--success)' },
+    { id: 'bond', label: 'Bono (RF)', icon: Landmark, color: '#818cf8' },
+    { id: 'bond_etf', label: 'ETF Renta Fija', icon: BarChart2, color: '#38bdf8' },
+    { id: 'cash', label: 'Liquidez', icon: DollarSign, color: '#eab308' },
+]
+
 // Calcula el impacto hipotético de una operación sobre el portfolio actual
-const computeOperationImpact = (analytics, form, stockSelected) => {
-    if (!analytics || !stockSelected || !form.shares || !form.price) return null
+const computeOperationImpact = (analytics, form, isFormReady, assetType = 'equity') => {
+    if (!analytics || !isFormReady || !form.shares || !form.price) return null
     const shares = Number(form.shares)
     const price = Number(form.price)
     if (!shares || !price) return null
 
-    const opValue = shares * price
+    // Para bonos el valor = nominal × precio_pct / 100; para cash = importe directo
+    const opValue = assetType === 'bond'
+        ? shares * price / 100
+        : assetType === 'cash'
+            ? shares
+            : shares * price
 
     if (form.type === 'buy') {
         const newTotal = analytics.totalValue + opValue
@@ -86,6 +105,7 @@ const computeOperationImpact = (analytics, form, stockSelected) => {
 }
 
 export default function Operations({ operations, analytics, onOperationAdded, onOperationDeleted }) {
+    const [assetType, setAssetType] = useState('equity')
     const [form, setForm] = useState(emptyForm)
     const [tickerQuery, setTickerQuery] = useState('')
     const [suggestions, setSuggestions] = useState([])
@@ -113,9 +133,15 @@ export default function Operations({ operations, analytics, onOperationAdded, on
         return () => document.removeEventListener('mousedown', handleClick)
     }, [])
 
+    const isFormReady = assetType === 'equity' || assetType === 'bond_etf'
+        ? stockSelected
+        : assetType === 'bond'
+            ? !!form.isin
+            : !!(form.shares && form.currency)  // cash
+
     const impact = useMemo(
-        () => computeOperationImpact(analytics, form, stockSelected),
-        [analytics, form, stockSelected]
+        () => computeOperationImpact(analytics, form, isFormReady, assetType),
+        [analytics, form, isFormReady, assetType]
     )
 
     const [searching, setSearching] = useState(false)
@@ -172,18 +198,52 @@ export default function Operations({ operations, analytics, onOperationAdded, on
 
     const handleSubmit = async (e) => {
         e.preventDefault()
-        if (!stockSelected || !form.ticker) {
-            setError('Selecciona un activo del desplegable.')
-            return
-        }
         setError(null)
-        setLoading(true)
-        try {
-            const op = await addOperation({
-                ...form,
+
+        let finalOp = { ...form, asset_type: assetType }
+
+        if (assetType === 'equity' || assetType === 'bond_etf') {
+            if (!stockSelected || !form.ticker) {
+                setError('Selecciona un activo del desplegable.')
+                return
+            }
+            finalOp = { ...finalOp, shares: Number(form.shares), price: Number(form.price) }
+
+        } else if (assetType === 'bond') {
+            if (!form.isin) { setError('El ISIN es obligatorio para bonos.'); return }
+            if (!form.shares || !form.price) { setError('Introduce el nominal y el precio de adquisición.'); return }
+            finalOp = {
+                ...finalOp,
+                ticker: form.isin.toUpperCase(),
+                company_name: form.company_name || form.isin.toUpperCase(),
                 shares: Number(form.shares),
                 price: Number(form.price),
-            })
+                isin: form.isin.toUpperCase(),
+                coupon_rate: form.coupon_rate ? Number(form.coupon_rate) : null,
+                duration: form.duration ? Number(form.duration) : null,
+                ytm_at_purchase: form.ytm_at_purchase ? Number(form.ytm_at_purchase) : null,
+                rating: form.rating || null,
+                maturity_date: form.maturity_date || null,
+                market_price: Number(form.price),  // precio adquisición como precio de mercado inicial
+            }
+
+        } else if (assetType === 'cash') {
+            if (!form.shares || !form.currency) { setError('Introduce el importe y la divisa.'); return }
+            const currency = form.currency || 'EUR'
+            finalOp = {
+                ...finalOp,
+                ticker: `CASH_${currency}`,
+                company_name: form.company_name || `Liquidez ${currency}`,
+                sector: 'Cash',
+                shares: Number(form.shares),
+                price: 1.0,
+                currency,
+            }
+        }
+
+        setLoading(true)
+        try {
+            const op = await addOperation(finalOp)
             onOperationAdded(op)
             setForm(emptyForm)
             setTickerQuery('')
@@ -212,6 +272,16 @@ export default function Operations({ operations, analytics, onOperationAdded, on
         setStockSelected(false)
         setError(null)
         setSuggestions([])
+        setAssetType('equity')
+    }
+
+    const handleAssetTypeChange = (type) => {
+        setAssetType(type)
+        setForm(emptyForm)
+        setStockSelected(false)
+        setTickerQuery('')
+        setSuggestions([])
+        setError(null)
     }
 
     return (
@@ -237,6 +307,32 @@ export default function Operations({ operations, analytics, onOperationAdded, on
                 <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
                     <h3 style={{ marginBottom: '1.5rem' }}>Registrar operación</h3>
                     <form onSubmit={handleSubmit}>
+
+                        {/* Selector tipo de activo */}
+                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                            {ASSET_TYPES.map(t => (
+                                <button
+                                    key={t.id}
+                                    type="button"
+                                    onClick={() => handleAssetTypeChange(t.id)}
+                                    style={{
+                                        padding: '0.6rem 1rem',
+                                        borderRadius: '8px',
+                                        border: assetType === t.id ? `1px solid ${t.color}` : '1px solid rgba(255,255,255,0.1)',
+                                        background: assetType === t.id ? `${t.color}1a` : 'transparent',
+                                        color: assetType === t.id ? t.color : 'var(--text-secondary)',
+                                        cursor: 'pointer',
+                                        fontWeight: '600',
+                                        fontSize: '0.85rem',
+                                        display: 'flex', alignItems: 'center', gap: '0.4rem',
+                                        transition: 'all 0.2s',
+                                    }}
+                                >
+                                    <t.icon size={15} />
+                                    {t.label}
+                                </button>
+                            ))}
+                        </div>
 
                         {/* Buy / Sell toggle */}
                         <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' }}>
@@ -270,6 +366,91 @@ export default function Operations({ operations, analytics, onOperationAdded, on
                             ))}
                         </div>
 
+                        {/* ── Formulario: Liquidez ─────────────────────────────────────────── */}
+                        {assetType === 'cash' && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Descripción</label>
+                                    <input className="login-input" name="company_name" placeholder="Liquidez EUR" value={form.company_name} onChange={handleChange} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Divisa *</label>
+                                    <select className="login-input" name="currency" value={form.currency} onChange={handleChange} required style={{ background: '#1e293b', cursor: 'pointer' }}>
+                                        {['EUR', 'USD', 'CHF', 'GBP', 'DKK', 'JPY'].map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Importe *</label>
+                                    <input className="login-input" name="shares" type="number" min="0.01" step="any" placeholder="10000" value={form.shares} onChange={handleChange} required />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Fecha *</label>
+                                    <input className="login-input" name="date" type="date" value={form.date} onChange={handleChange} required />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ── Formulario: Bono individual ────────────────────────────────── */}
+                        {assetType === 'bond' && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>ISIN *</label>
+                                    <input className="login-input" name="isin" placeholder="XS2596599147" value={form.isin} onChange={e => setForm(p => ({ ...p, isin: e.target.value.toUpperCase() }))} required autoComplete="off" style={{ fontFamily: 'monospace' }} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Nombre del bono</label>
+                                    <input className="login-input" name="company_name" placeholder="PANDORA 4.5% 10/04/2028" value={form.company_name} onChange={handleChange} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Sector emisor</label>
+                                    <input className="login-input" name="sector" placeholder="Consumer Discretionary" value={form.sector} onChange={handleChange} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Divisa *</label>
+                                    <select className="login-input" name="currency" value={form.currency} onChange={handleChange} required style={{ background: '#1e293b', cursor: 'pointer' }}>
+                                        {['EUR', 'USD', 'CHF', 'GBP', 'DKK'].map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Nominal (€) *</label>
+                                    <input className="login-input" name="shares" type="number" min="0.01" step="any" placeholder="100000" value={form.shares} onChange={handleChange} required />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Precio adquisición (% nominal) *</label>
+                                    <input className="login-input" name="price" type="number" min="0.001" step="any" placeholder="104.02" value={form.price} onChange={handleChange} required />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Fecha operación *</label>
+                                    <input className="login-input" name="date" type="date" value={form.date} onChange={handleChange} required />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Fecha vencimiento</label>
+                                    <input className="login-input" name="maturity_date" type="date" value={form.maturity_date} onChange={handleChange} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Cupón (%)</label>
+                                    <input className="login-input" name="coupon_rate" type="number" min="0" step="any" placeholder="4.5" value={form.coupon_rate} onChange={handleChange} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>TIR compra (%)</label>
+                                    <input className="login-input" name="ytm_at_purchase" type="number" min="0" step="any" placeholder="3.037" value={form.ytm_at_purchase} onChange={handleChange} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Duración modificada (años)</label>
+                                    <input className="login-input" name="duration" type="number" min="0" step="any" placeholder="1.895" value={form.duration} onChange={handleChange} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Rating</label>
+                                    <select className="login-input" name="rating" value={form.rating} onChange={handleChange} style={{ background: '#1e293b', cursor: 'pointer' }}>
+                                        <option value="">Sin rating</option>
+                                        {['AAA', 'AA', 'A', 'BBB', 'BB', 'B', 'NR'].map(r => <option key={r} value={r}>{r}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ── Formulario: Equity y ETF RF ───────────────────────────────── */}
+                        {(assetType === 'equity' || assetType === 'bond_etf') && (
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
 
                             {/* Ticker autocomplete */}
@@ -456,6 +637,15 @@ export default function Operations({ operations, analytics, onOperationAdded, on
                                 </div>
                             )}
                         </div>
+                        )}{/* fin equity/bond_etf form */}
+
+                        {/* Valor estimado para bonos */}
+                        {assetType === 'bond' && form.shares && form.price && (
+                            <div style={{ marginTop: '0.5rem', padding: '0.85rem 1rem', borderRadius: '8px', background: 'rgba(129,140,248,0.08)', border: '1px solid rgba(129,140,248,0.2)', fontWeight: '700', fontSize: '1.1rem', color: '#818cf8' }}>
+                                Valor estimado: {formatCurrency(Number(form.shares) * Number(form.price) / 100, form.currency)}
+                                <span style={{ fontSize: '0.8rem', fontWeight: '400', color: 'var(--text-secondary)', marginLeft: '0.5rem' }}>({form.shares}€ nominal × {form.price}%)</span>
+                            </div>
+                        )}
 
                         {/* Preview de impacto en el portfolio */}
                         {impact && (
@@ -514,7 +704,7 @@ export default function Operations({ operations, analytics, onOperationAdded, on
                         )}
 
                         <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
-                            <button type="submit" className="btn" disabled={loading || !stockSelected}>
+                            <button type="submit" className="btn" disabled={loading || !isFormReady}>
                                 {loading ? 'Guardando...' : 'Guardar operación'}
                             </button>
                             <button

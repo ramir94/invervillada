@@ -239,7 +239,7 @@ export const calculatePortfolioMetrics = (holdings, marketData, costBasis) => {
             annualYield,
             annualIncome,
             factor: assetType === 'bond_etf' ? 'fixed_income' : (SECTOR_FACTOR[h.sector] ?? 'other'),
-            isInternational: INTERNATIONAL_TICKERS.has(h.ticker),
+            isInternational: h.currency !== 'EUR' || INTERNATIONAL_TICKERS.has(h.ticker),
             weight: 0,
             riskContribution: 0,
             contributionToReturn: 0,
@@ -332,12 +332,20 @@ const buildAlerts = (positions, top3Weight, portfolioBeta, currencyExposure = {}
     });
 
     positions.filter(p => p.unrealizedPnLPct < -15).forEach(p => {
+        const isBond = p.asset_type === 'bond' || p.asset_type === 'bond_etf';
+        const displayName = p.name ?? p.ticker;
         alerts.push({
             type: 'deterioration',
-            severity: 'medium',
+            severity: isBond ? 'medium' : 'medium',
             ticker: p.ticker,
-            message: `${p.ticker} acumula ${p.unrealizedPnLPct.toFixed(1)}% de pérdida sobre coste de compra`,
-            action: `Revisa la tesis de inversión de ${p.ticker}`,
+            name: displayName,
+            asset_type: p.asset_type,
+            message: isBond
+                ? `${displayName} cotiza al ${p.currentPrice?.toFixed(1) ?? '—'}% del nominal — pérdida latente ${p.unrealizedPnLPct.toFixed(1)}%`
+                : `${displayName} (${p.ticker}) acumula ${p.unrealizedPnLPct.toFixed(1)}% de pérdida sobre coste de compra`,
+            action: isBond
+                ? 'Evaluar riesgo crediticio del emisor — verificar si la caída refleja deterioro fundamental'
+                : `Revisar tesis de inversión — confirmar si el deterioro es temporal o estructural`,
         });
     });
 
@@ -544,10 +552,16 @@ export const generateInsights = (metrics) => {
         });
     }
 
-    if (internationalWeight < 15 && positions.length >= 4) {
+    // La diversificación geográfica se evalúa solo en equity (para una SICAV mixta el USD/EUR split es la métrica correcta)
+    const equityPositions = positions.filter(p => (p.asset_type ?? 'equity') === 'equity');
+    const equityValue = equityPositions.reduce((s, p) => s + p.value, 0);
+    const domesticEquityPct = equityValue > 0
+        ? equityPositions.filter(p => !p.isInternational).reduce((s, p) => s + p.value, 0) / equityValue * 100
+        : 0;
+    if (domesticEquityPct > 80 && equityPositions.length >= 4) {
         warning.push({
-            title: `Solo el ${internationalWeight.toFixed(0)}% del portfolio está en activos internacionales — concentración en un solo mercado`,
-            action: 'Considera diversificación geográfica: mercados europeos, asiáticos o globales',
+            title: `${domesticEquityPct.toFixed(0)}% de la RV en mercado doméstico — diversificación geográfica limitada en la cartera de acciones`,
+            action: 'Considera exposición internacional para reducir riesgo de mercado local',
             ticker: null,
         });
     }
@@ -568,10 +582,12 @@ export const generateInsights = (metrics) => {
         factorGroups[p.factor].push(p.ticker);
     });
     Object.entries(factorGroups).forEach(([factor, tickers]) => {
+        // RF: múltiples bonos en el mismo factor es normal para una SICAV con cartera mixta
+        if (factor === 'fixed_income') return;
         if (tickers.length >= 3 && (factorExposure[factor] ?? 0) > 40) {
             warning.push({
-                title: `${tickers.length} posiciones en el mismo factor (${factor}): ${tickers.join(', ')} — concentración de factor oculta`,
-                action: 'Aunque están en sectores distintos, pueden moverse juntas ante el mismo shock de mercado',
+                title: `${tickers.length} posiciones en el factor "${factor}" concentran el ${(factorExposure[factor] ?? 0).toFixed(0)}% del portfolio — correlación elevada`,
+                action: 'Estos activos pueden moverse juntos ante el mismo shock de mercado',
                 ticker: null,
             });
         }
@@ -608,7 +624,7 @@ export const generateInsights = (metrics) => {
     }
 
     if (portfolioYield !== undefined && portfolioYield >= 2.5) {
-        const incomeFormatted = totalAnnualIncome.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+        const incomeFormatted = totalAnnualIncome.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
         positive.push({
             title: `Yield del portfolio: ${portfolioYield.toFixed(1)}% — ingreso anual estimado ${incomeFormatted}`,
             action: null,

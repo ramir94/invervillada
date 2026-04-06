@@ -112,7 +112,7 @@ export default function Simulator({ analytics }) {
                     {/* Selector de escenarios */}
                     <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
                         <h3 style={{ marginBottom: '1.25rem' }}>Selecciona un escenario</h3>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                        <div className="scenario-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
                             {Object.entries(ALL_SCENARIOS).map(([id, scenario]) => {
                                 const meta = SCENARIO_META[id] ?? { color: '#94a3b8', icon: TrendingDown };
                                 const IconComp = meta.icon;

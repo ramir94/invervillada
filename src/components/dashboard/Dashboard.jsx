@@ -107,7 +107,8 @@ export default function Dashboard({ analytics, drawdown, portfolioReturn, sicavD
         };
     })() : null;
 
-    const doughnutOptions = { plugins: { legend: { position: 'right', labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 12 } } }, maintainAspectRatio: false };
+    const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+    const doughnutOptions = { plugins: { legend: { position: isMobile ? 'bottom' : 'right', labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 12 } } }, maintainAspectRatio: false };
 
     const scoreColor = healthScore.score >= 70
         ? 'var(--success)'
@@ -514,7 +515,7 @@ export default function Dashboard({ analytics, drawdown, portfolioReturn, sicavD
                             data={sectorChartData}
                             options={{
                                 plugins: {
-                                    legend: { position: 'right', labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 12 } }
+                                    legend: { position: isMobile ? 'bottom' : 'right', labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 12 } }
                                 },
                                 maintainAspectRatio: false,
                             }}

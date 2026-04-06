@@ -368,7 +368,7 @@ export default function Operations({ operations, analytics, onOperationAdded, on
 
                         {/* ── Formulario: Liquidez ─────────────────────────────────────────── */}
                         {assetType === 'cash' && (
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                            <div className="form-grid-2col" style={{ marginBottom: '1rem' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                                     <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Descripción</label>
                                     <input className="login-input" name="company_name" placeholder="Liquidez EUR" value={form.company_name} onChange={handleChange} />
@@ -392,7 +392,7 @@ export default function Operations({ operations, analytics, onOperationAdded, on
 
                         {/* ── Formulario: Bono individual ────────────────────────────────── */}
                         {assetType === 'bond' && (
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                            <div className="form-grid-2col" style={{ marginBottom: '1rem' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                                     <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>ISIN *</label>
                                     <input className="login-input" name="isin" placeholder="XS2596599147" value={form.isin} onChange={e => setForm(p => ({ ...p, isin: e.target.value.toUpperCase() }))} required autoComplete="off" style={{ fontFamily: 'monospace' }} />
@@ -451,7 +451,7 @@ export default function Operations({ operations, analytics, onOperationAdded, on
 
                         {/* ── Formulario: Equity y ETF RF ───────────────────────────────── */}
                         {(assetType === 'equity' || assetType === 'bond_etf') && (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                        <div className="form-grid-2col">
 
                             {/* Ticker autocomplete */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', position: 'relative' }} ref={suggestionsRef}>

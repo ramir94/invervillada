@@ -53,10 +53,8 @@ const RatingBadge = ({ rating }) => {
 };
 
 const ASSET_FILTERS = [
-    { id: 'all',   label: 'Todos' },
     { id: 'equity', label: 'Renta Variable' },
-    { id: 'bond',  label: 'Renta Fija' },
-    { id: 'cash',  label: 'Liquidez' },
+    { id: 'bond',   label: 'Renta Fija' },
 ];
 
 const formatMaturity = (dateStr) => {
@@ -67,7 +65,7 @@ const formatMaturity = (dateStr) => {
 
 export default function PortfolioTable({ analytics }) {
     const [sortBy, setSortBy] = useState('weight');
-    const [assetFilter, setAssetFilter] = useState('all');
+    const [assetFilter, setAssetFilter] = useState('equity');
 
     if (!analytics) {
         return (
@@ -88,9 +86,8 @@ export default function PortfolioTable({ analytics }) {
     });
 
     const filtered = positions.filter(p => {
-        if (assetFilter === 'all') return true;
-        if (assetFilter === 'bond') return p.asset_type === 'bond' || p.asset_type === 'bond_etf';
-        return (p.asset_type ?? 'equity') === assetFilter;
+        if (assetFilter === 'bond') return p.asset_type === 'bond' || p.asset_type === 'bond_etf' || p.asset_type === 'cash';
+        return (p.asset_type ?? 'equity') === 'equity';
     });
 
     const sorted = [...filtered].sort((a, b) => {
@@ -106,12 +103,10 @@ export default function PortfolioTable({ analytics }) {
     });
 
     const isBondView = assetFilter === 'bond';
-    const isCashView = assetFilter === 'cash';
 
     const countByType = {
         equity: positions.filter(p => (p.asset_type ?? 'equity') === 'equity').length,
-        bond: positions.filter(p => p.asset_type === 'bond' || p.asset_type === 'bond_etf').length,
-        cash: positions.filter(p => p.asset_type === 'cash').length,
+        bond: positions.filter(p => p.asset_type === 'bond' || p.asset_type === 'bond_etf' || p.asset_type === 'cash').length,
     };
 
     return (
@@ -126,7 +121,7 @@ export default function PortfolioTable({ analytics }) {
             {/* Tabs de filtro por clase de activo */}
             <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
                 {ASSET_FILTERS.map(f => {
-                    const count = f.id === 'all' ? positions.length : f.id === 'bond' ? countByType.bond : countByType[f.id] ?? 0;
+                    const count = countByType[f.id] ?? 0;
                     const isActive = assetFilter === f.id;
                     return (
                         <button
@@ -161,17 +156,15 @@ export default function PortfolioTable({ analytics }) {
                 })}
             </div>
 
-            {/* Sort buttons — solo para vistas relevantes */}
-            {!isCashView && (
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Ordenar por:</span>
-                    <SortButton id="weight" label="Peso %" current={sortBy} onClick={setSortBy} />
-                    {!isBondView && <SortButton id="risk" label="Contribución riesgo" current={sortBy} onClick={setSortBy} />}
-                    <SortButton id="pnlPct" label="P&L %" current={sortBy} onClick={setSortBy} />
-                    <SortButton id="yield" label="Yield/Cupón" current={sortBy} onClick={setSortBy} />
-                    <SortButton id="value" label="Valor" current={sortBy} onClick={setSortBy} />
-                </div>
-            )}
+            {/* Sort buttons */}
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Ordenar por:</span>
+                <SortButton id="weight" label="Peso %" current={sortBy} onClick={setSortBy} />
+                {!isBondView && <SortButton id="risk" label="Contribución riesgo" current={sortBy} onClick={setSortBy} />}
+                <SortButton id="pnlPct" label="P&L %" current={sortBy} onClick={setSortBy} />
+                <SortButton id="yield" label="Yield/Cupón" current={sortBy} onClick={setSortBy} />
+                <SortButton id="value" label="Valor" current={sortBy} onClick={setSortBy} />
+            </div>
 
             <div className="glass-panel table-container">
                 <table>
@@ -270,37 +263,8 @@ export default function PortfolioTable({ analytics }) {
                         </>
                     )}
 
-                    {/* ── Vista Liquidez ── */}
-                    {isCashView && (
-                        <>
-                            <thead>
-                                <tr>
-                                    <th>Descripción</th>
-                                    <th>Ticker</th>
-                                    <th style={{ textAlign: 'right' }}>Importe</th>
-                                    <th style={{ textAlign: 'right' }}>Peso %</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {sorted.map(row => (
-                                    <tr key={row.ticker}>
-                                        <td>
-                                            <div style={{ fontSize: '0.9rem' }}>{row.name}</div>
-                                            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{row.sector}</div>
-                                        </td>
-                                        <td style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: 'var(--accent-color)' }}>
-                                            {row.ticker}
-                                        </td>
-                                        <td style={{ textAlign: 'right', fontWeight: '600' }}>{formatCurrency(row.value)}</td>
-                                        <td style={{ textAlign: 'right' }}>{row.weight.toFixed(1)}%</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </>
-                    )}
-
-                    {/* ── Vista Equity / Todos ── */}
-                    {!isBondView && !isCashView && (
+                    {/* ── Vista Renta Variable ── */}
+                    {!isBondView && (
                         <>
                             <thead>
                                 <tr>
@@ -326,7 +290,6 @@ export default function PortfolioTable({ analytics }) {
                                         </span>
                                     </th>
                                     <th style={{ textAlign: 'right' }}>Var. Hoy</th>
-                                    {assetFilter === 'all' && <th style={{ textAlign: 'center' }}>Tipo</th>}
                                     <th style={{ textAlign: 'center' }}>
                                         <span title="Alertas activas para esta posición" style={{ cursor: 'help' }}>
                                             <Info size={13} style={{ opacity: 0.5 }} />
@@ -341,7 +304,6 @@ export default function PortfolioTable({ analytics }) {
                                     const hasMedAlert = rowAlerts.some(a => a.severity === 'medium');
                                     const isOverweight = row.weight > 15;
                                     const isDeteriorating = row.unrealizedPnLPct < -15;
-                                    const assetType = row.asset_type ?? 'equity';
 
                                     return (
                                         <tr key={row.ticker} style={{ background: hasHighAlert ? 'rgba(239,68,68,0.03)' : undefined }}>
@@ -403,19 +365,6 @@ export default function PortfolioTable({ analytics }) {
                                                     </span>
                                                 )}
                                             </td>
-                                            {assetFilter === 'all' && (
-                                                <td style={{ textAlign: 'center' }}>
-                                                    {assetType === 'bond' && (
-                                                        <span style={{ fontSize: '0.68rem', background: 'rgba(147,51,234,0.15)', color: '#a855f7', padding: '0.1rem 0.35rem', borderRadius: '4px' }}>RF</span>
-                                                    )}
-                                                    {assetType === 'bond_etf' && (
-                                                        <span style={{ fontSize: '0.68rem', background: 'rgba(147,51,234,0.1)', color: '#a855f7', padding: '0.1rem 0.35rem', borderRadius: '4px' }}>ETF RF</span>
-                                                    )}
-                                                    {assetType === 'cash' && (
-                                                        <span style={{ fontSize: '0.68rem', background: 'rgba(234,179,8,0.15)', color: '#eab308', padding: '0.1rem 0.35rem', borderRadius: '4px' }}>Cash</span>
-                                                    )}
-                                                </td>
-                                            )}
                                             <td style={{ textAlign: 'center', width: '40px' }}>
                                                 {hasHighAlert && (
                                                     <span title={rowAlerts.find(a => a.severity === 'high')?.message} style={{ cursor: 'help', display: 'inline-flex' }}>

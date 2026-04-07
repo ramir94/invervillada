@@ -181,12 +181,18 @@ export default function Operations({ operations, analytics, onOperationAdded, on
 
     const selectStock = (stock) => {
         setTickerQuery(stock.ticker)
+        // Para ventas, usar la divisa de la posición existente (no la del catálogo)
+        let currency = stock.currency || 'USD'
+        if (form.type === 'sell' && analytics?.positions) {
+            const pos = analytics.positions.find(p => p.ticker === stock.ticker)
+            if (pos?.currency) currency = pos.currency
+        }
         setForm(prev => ({
             ...prev,
             ticker: stock.ticker,
             company_name: stock.name,
             sector: stock.sector || '',
-            currency: stock.currency || 'USD',
+            currency,
         }))
         setStockSelected(true)
         setSuggestions([])
@@ -207,7 +213,22 @@ export default function Operations({ operations, analytics, onOperationAdded, on
                 setError('Selecciona un activo del desplegable.')
                 return
             }
-            finalOp = { ...finalOp, shares: Number(form.shares), price: Number(form.price) }
+            if (!form.shares || !form.price) {
+                setError('Introduce el número de acciones y el precio.')
+                return
+            }
+            // Limpiar campos de renta fija que no aplican a equity/bond_etf
+            finalOp = {
+                ...finalOp,
+                shares: Number(form.shares),
+                price: Number(form.price),
+                isin: null,
+                maturity_date: null,
+                coupon_rate: null,
+                rating: null,
+                duration: null,
+                ytm_at_purchase: null,
+            }
 
         } else if (assetType === 'bond') {
             if (!form.isin) { setError('El ISIN es obligatorio para bonos.'); return }
@@ -340,7 +361,15 @@ export default function Operations({ operations, analytics, onOperationAdded, on
                                 <button
                                     key={t}
                                     type="button"
-                                    onClick={() => setForm(p => ({ ...p, type: t }))}
+                                    onClick={() => setForm(p => {
+                                        const updated = { ...p, type: t }
+                                        // Al cambiar a venta, usar la divisa de la posición existente
+                                        if (t === 'sell' && stockSelected && p.ticker && analytics?.positions) {
+                                            const pos = analytics.positions.find(pos => pos.ticker === p.ticker)
+                                            if (pos?.currency) updated.currency = pos.currency
+                                        }
+                                        return updated
+                                    })}
                                     style={{
                                         flex: 1,
                                         padding: '0.75rem',

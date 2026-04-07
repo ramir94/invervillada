@@ -731,7 +731,7 @@ function SicavNavBar({ data }) {
         }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Landmark size={16} color="var(--accent-color)" />
-                <span style={{ fontWeight: '600', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Invervillada SICAV</span>
+                <a href="https://www.cnmv.es/Portal/consultas/iic/sociedadiic?isin=ES0155476007" target="_blank" rel="noopener noreferrer" style={{ fontWeight: '600', fontSize: '0.85rem', color: 'var(--text-secondary)', textDecoration: 'none' }}>Invervillada SICAV</a>
             </div>
 
             <div style={{ fontSize: '1.5rem', fontWeight: '700' }}>{formatNav(price)}</div>

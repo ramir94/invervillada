@@ -6,7 +6,7 @@ import AIAnalysis from './AIAnalysis'
 import Simulator from './Simulator'
 import Operations from './Operations'
 import { getMarketData } from '../../services/marketData'
-import { getOperations, buildHoldingsFromOperations } from '../../services/operations'
+import { getOperations, buildHoldingsFromOperations, redeemMaturedBonds } from '../../services/operations'
 import { calculateCostBasis, calculatePortfolioMetrics, calculateDrawdown, calculatePortfolioReturn } from '../../utils/analytics'
 import { saveSnapshot, getSnapshots } from '../../services/snapshots'
 import { useAuth } from '../../contexts/AuthContext'
@@ -33,7 +33,12 @@ export default function DashboardApp() {
     // Carga inicial: primero operaciones y snapshots, luego market data para los tickers del usuario
     useEffect(() => {
         const init = async () => {
-            const [ops, snaps] = await Promise.all([getOperations(), getSnapshots()])
+            let [ops, snaps] = await Promise.all([getOperations(), getSnapshots()])
+
+            // Redimir automáticamente bonos vencidos
+            const maturedOps = await redeemMaturedBonds(ops)
+            if (maturedOps.length > 0) ops = [...maturedOps, ...ops]
+
             setOperations(ops)
             setSnapshots(snaps)
 

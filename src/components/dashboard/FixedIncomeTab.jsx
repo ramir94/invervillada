@@ -2,6 +2,7 @@ import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import { Doughnut } from 'react-chartjs-2';
 import { Landmark } from 'lucide-react';
 import { RATING_COLORS, MATURITY_COLORS, getDoughnutOptions } from './dashboardHelpers';
+import FixedIncomeTable from './FixedIncomeTable';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -110,6 +111,9 @@ export default function FixedIncomeTab({ analytics }) {
                     </div>
                 )}
             </div>
+
+            {/* Tabla completa de posiciones RF (bonos + ETFs RF + liquidez) */}
+            <FixedIncomeTable analytics={analytics} />
         </div>
     );
 }

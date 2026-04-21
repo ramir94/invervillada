@@ -348,18 +348,20 @@ const buildAlerts = (positions, top3Weight, portfolioBeta, currencyExposure = {}
     });
 
     positions.filter(p => p.unrealizedPnLPct < -15).forEach(p => {
-        const isBond = p.asset_type === 'bond' || p.asset_type === 'bond_etf';
+        // Solo el bono individual se expresa como "% del nominal"; los ETF RF y las acciones
+        // cotizan con precio absoluto y se presentan como pérdida sobre coste
+        const isIndividualBond = p.asset_type === 'bond';
         const displayName = p.name ?? p.ticker;
         alerts.push({
             type: 'deterioration',
-            severity: isBond ? 'medium' : 'medium',
+            severity: 'medium',
             ticker: p.ticker,
             name: displayName,
             asset_type: p.asset_type,
-            message: isBond
+            message: isIndividualBond
                 ? `${displayName} cotiza al ${p.currentPrice?.toFixed(1) ?? '—'}% del nominal — pérdida latente ${p.unrealizedPnLPct.toFixed(1)}%`
                 : `${displayName} (${p.ticker}) acumula ${p.unrealizedPnLPct.toFixed(1)}% de pérdida sobre coste de compra`,
-            action: isBond
+            action: isIndividualBond
                 ? 'Evaluar riesgo crediticio del emisor — verificar si la caída refleja deterioro fundamental'
                 : `Revisar tesis de inversión — confirmar si el deterioro es temporal o estructural`,
         });

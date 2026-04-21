@@ -35,6 +35,18 @@ const INTERNATIONAL_TICKERS = new Set([
     'DB1', 'ALV', 'MUV2', 'IFX', 'ADS', 'BEI', 'CON',
 ]);
 
+// Tipos de cambio a EUR (alineados con informe Singular Bank 17/04/2026).
+// Convención: 1 unidad de la divisa listada equivale a FX_TO_EUR[divisa] euros.
+const FX_TO_EUR = {
+    EUR: 1,
+    USD: 0.8500,
+    CHF: 1.0873,
+    DKK: 0.1338,
+    GBP: 1.1489,
+};
+
+const toEur = (amount, currency) => amount * (FX_TO_EUR[currency] ?? 1);
+
 // Retornos de referencia — datos mock actualizados a Q1 2026
 // En producción reemplazar por API (Yahoo Finance, MSCI)
 export const BENCHMARK_RETURNS = {
@@ -187,13 +199,16 @@ export const calculatePortfolioMetrics = (holdings, marketData, costBasis) => {
             const liveData = marketData[h.ticker];
             // Jerarquía: precio live (Yahoo Finance) → último guardado en DB → par (100)
             const marketPrice = liveData?.price ?? h.market_price ?? 100;
-            const nominal = Number(h.shares);  // shares = nominal en €
-            const value = nominal * marketPrice / 100;
+            const nominal = Number(h.shares);  // shares = nominal en divisa original
+            // Valor en divisa del bono, convertido a EUR para agregaciones
+            const valueLocal = nominal * marketPrice / 100;
+            const value = toEur(valueLocal, h.currency);
             const acquisitionPrice = costBasis[h.ticker] ?? 100;
-            const costValue = nominal * acquisitionPrice / 100;
+            const costValueLocal = nominal * acquisitionPrice / 100;
+            const costValue = toEur(costValueLocal, h.currency);
             const unrealizedPnL = value - costValue;
             const unrealizedPnLPct = costValue > 0 ? (unrealizedPnL / costValue) * 100 : 0;
-            const annualIncome = h.coupon_rate ? (h.coupon_rate / 100) * nominal : 0;
+            const annualIncome = toEur(h.coupon_rate ? (h.coupon_rate / 100) * nominal : 0, h.currency);
 
             return {
                 ...h,
@@ -219,9 +234,10 @@ export const calculatePortfolioMetrics = (holdings, marketData, costBasis) => {
         const data = marketData[h.ticker];
         if (!data) return null;
         const currentPrice = data.price;
-        const value = currentPrice * h.shares;
         const avgCost = costBasis[h.ticker] ?? currentPrice;
-        const unrealizedPnL = (currentPrice - avgCost) * h.shares;
+        // Valor y PnL en EUR (convierte desde la divisa de cotización)
+        const value = toEur(currentPrice * h.shares, h.currency);
+        const unrealizedPnL = toEur((currentPrice - avgCost) * h.shares, h.currency);
         const unrealizedPnLPct = avgCost > 0 ? (currentPrice / avgCost - 1) * 100 : 0;
         const beta = assetType === 'bond_etf' ? 0.3 : estimateBeta(h.ticker, h.sector);
         const annualYield = data.yield ?? 0;
@@ -233,7 +249,7 @@ export const calculatePortfolioMetrics = (holdings, marketData, costBasis) => {
             avgCost,
             unrealizedPnL,
             unrealizedPnLPct,
-            dailyChange: data.changeAmount * h.shares,
+            dailyChange: toEur(data.changeAmount * h.shares, h.currency),
             dailyChangePct: data.changePercent,
             beta,
             annualYield,

@@ -220,6 +220,7 @@ export const STOCK_CATALOG = [
 
     // === Europa - Health Care ===
     { ticker: 'NOVN', name: 'Novartis AG',               sector: 'Health Care',             currency: 'CHF' },
+    { ticker: 'NOVO-B.CO', name: 'Novo Nordisk A/S Class B', sector: 'Health Care',         currency: 'DKK' },
     { ticker: 'ROG',  name: 'Roche Holding AG',          sector: 'Health Care',             currency: 'CHF' },
     { ticker: 'SREN', name: 'Swiss Re AG',               sector: 'Financials',              currency: 'CHF' },
     { ticker: 'AZN',  name: 'AstraZeneca PLC',           sector: 'Health Care',             currency: 'GBP' },

@@ -46,8 +46,15 @@ export const updateOperationMarketPrice = async (ticker, marketPrice) => {
 export const redeemMaturedBonds = async (operations) => {
     const today = new Date().toISOString().split('T')[0]
     const holdings = buildHoldingsFromOperations(operations)
-    const maturedBonds = holdings.filter(
-        h => h.asset_type === 'bond' && h.maturity_date && h.maturity_date <= today && h.shares > 0
+    // Solo auto-redimir bonos que cotizan cerca del par (≥ 95%).
+    // Bonos "distressed" (precio muy por debajo) no se redimen al 100% aunque la fecha técnica haya pasado
+    // y requieren tratamiento manual (ej. restructuración, call prorrogado, default).
+    const maturedBonds = holdings.filter(h =>
+        h.asset_type === 'bond'
+        && h.maturity_date
+        && h.maturity_date <= today
+        && h.shares > 0
+        && (h.market_price == null || h.market_price >= 95)
     )
 
     if (maturedBonds.length === 0) return []
@@ -121,6 +128,7 @@ export const buildHoldingsFromOperations = (operations) => {
                 name: op.company_name,
                 sector: op.sector,
                 currency: op.currency,
+                country: op.country ?? null,
                 shares: 0,
                 asset_type: assetType,
                 // Campos de renta fija (null para equity/cash)
@@ -142,5 +150,7 @@ export const buildHoldingsFromOperations = (operations) => {
         }
     })
 
-    return Object.values(holdingsMap).filter(h => h.shares > 0)
+    // Accruals (deudores/acreedores) pueden tener saldo negativo → se conservan igualmente;
+    // el resto sólo si sigue habiendo posición viva.
+    return Object.values(holdingsMap).filter(h => h.asset_type === 'accrual' || h.shares > 0)
 }

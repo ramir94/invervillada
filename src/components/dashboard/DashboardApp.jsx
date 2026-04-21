@@ -9,6 +9,11 @@ import { getMarketData } from '../../services/marketData'
 import { getOperations, buildHoldingsFromOperations, redeemMaturedBonds } from '../../services/operations'
 import { calculateCostBasis, calculatePortfolioMetrics, calculateDrawdown, calculatePortfolioReturn } from '../../utils/analytics'
 import { saveSnapshot, getSnapshots } from '../../services/snapshots'
+import { getLatestSicavInfo } from '../../services/sicavInfo'
+import { getMonthlyReturns } from '../../services/monthlyReturns'
+import { getIncomesSummary } from '../../services/incomes'
+import { getExpensesSummary } from '../../services/expenses'
+import { getLatestDerivativesExposure } from '../../services/derivatives'
 import { useAuth } from '../../contexts/AuthContext'
 
 const navItems = [
@@ -28,12 +33,25 @@ export default function DashboardApp() {
     const [marketData, setMarketData] = useState(null)
     const [operations, setOperations] = useState([])
     const [snapshots, setSnapshots] = useState([])
+    const [sicavInfo, setSicavInfo] = useState(null)
+    const [monthlyReturns, setMonthlyReturns] = useState([])
+    const [incomesSummary, setIncomesSummary] = useState(null)
+    const [expensesSummary, setExpensesSummary] = useState(null)
+    const [derivativesExposures, setDerivativesExposures] = useState(null)
     const [loading, setLoading] = useState(true)
 
-    // Carga inicial: primero operaciones y snapshots, luego market data para los tickers del usuario
+    // Carga inicial: primero operaciones, snapshots y datos SICAV en paralelo, luego market data
     useEffect(() => {
         const init = async () => {
-            let [ops, snaps] = await Promise.all([getOperations(), getSnapshots()])
+            let [ops, snaps, sicav, mReturns, incomes, expenses, derivs] = await Promise.all([
+                getOperations(),
+                getSnapshots(),
+                getLatestSicavInfo().catch(() => null), // no romper el dashboard si falla
+                getMonthlyReturns().catch(() => []),
+                getIncomesSummary().catch(() => null),
+                getExpensesSummary().catch(() => null),
+                getLatestDerivativesExposure().catch(() => null),
+            ])
 
             // Redimir automáticamente bonos vencidos
             const maturedOps = await redeemMaturedBonds(ops)
@@ -41,6 +59,11 @@ export default function DashboardApp() {
 
             setOperations(ops)
             setSnapshots(snaps)
+            setSicavInfo(sicav)
+            setMonthlyReturns(mReturns)
+            setIncomesSummary(incomes)
+            setExpensesSummary(expenses)
+            setDerivativesExposures(derivs)
 
             const tickerItems = [
                 ...ops.map(op => ({ ticker: op.ticker, asset_type: op.asset_type ?? 'equity' })),
@@ -273,7 +296,7 @@ export default function DashboardApp() {
             </aside>
 
             <main className="main-content">
-                {activeTab === 'dashboard' && <Dashboard analytics={analytics} drawdown={drawdown} portfolioReturn={portfolioReturn} sicavData={marketData?.[SICAV_TICKER] ?? null} snapshotCount={snapshots.length} />}
+                {activeTab === 'dashboard' && <Dashboard analytics={analytics} drawdown={drawdown} portfolioReturn={portfolioReturn} sicavData={marketData?.[SICAV_TICKER] ?? null} sicavInfo={sicavInfo} snapshotCount={snapshots.length} monthlyReturns={monthlyReturns} incomesSummary={incomesSummary} expensesSummary={expensesSummary} derivativesExposures={derivativesExposures} />}
                 {activeTab === 'portfolio' && <PortfolioTable analytics={analytics} />}
                 {activeTab === 'operations' && (
                     <Operations

@@ -4,6 +4,11 @@ import { Doughnut } from 'react-chartjs-2';
 import { formatCurrency } from '../../utils/formatting';
 import { BENCHMARK_RETURNS } from '../../utils/analytics';
 import { AlertTriangle, TrendingUp, TrendingDown, Wallet, Activity, Shield, Target, Info, BarChart2, DollarSign, Globe, Landmark } from 'lucide-react';
+import SicavInfoWidget from './SicavInfoWidget';
+import MonthlyReturnsWidget from './MonthlyReturnsWidget';
+import GeoExposureWidget from './GeoExposureWidget';
+import IncomeExpenseWidget from './IncomeExpenseWidget';
+import DerivativesExposureWidget from './DerivativesExposureWidget';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -46,7 +51,7 @@ const CURRENCY_COLORS = {
     GBp: '#f472b6',
 };
 
-export default function Dashboard({ analytics, drawdown, portfolioReturn, sicavData, snapshotCount = 0 }) {
+export default function Dashboard({ analytics, drawdown, portfolioReturn, sicavData, sicavInfo, snapshotCount = 0, monthlyReturns = null, incomesSummary = null, expensesSummary = null, derivativesExposures = null }) {
     const sectorChartData = useMemo(() => {
         if (!analytics) return null;
         const sectorMap = {};
@@ -78,8 +83,10 @@ export default function Dashboard({ analytics, drawdown, portfolioReturn, sicavD
         totalAnnualIncome, portfolioYield,
         top3Weight, top3, portfolioBeta,
         factorExposure, currencyExposure, healthScore, alerts, positions,
-        assetAllocation, fixedIncomeMetrics,
+        assetAllocation, fixedIncomeMetrics, geoExposure,
     } = analytics;
+
+    const hasGeoExposure = geoExposure && Object.values(geoExposure).some(v => v > 0.01);
 
     const hasMultipleAssetTypes = assetAllocation && [assetAllocation.equity, assetAllocation.bond, assetAllocation.cash].filter(v => v > 0.5).length > 1;
 
@@ -131,6 +138,9 @@ export default function Dashboard({ analytics, drawdown, portfolioReturn, sicavD
                 <h2>Visión General</h2>
                 <p style={{ color: 'var(--text-secondary)' }}>Estado real del portfolio y señales de riesgo activas.</p>
             </header>
+
+            {/* Información SICAV — widget full-width, solo si hay fila en sicav_info */}
+            <SicavInfoWidget sicavInfo={sicavInfo} />
 
             {/* Alertas críticas */}
             {highAlerts.length > 0 && (
@@ -281,6 +291,15 @@ export default function Dashboard({ analytics, drawdown, portfolioReturn, sicavD
                     <SicavNavBar data={sicavData} />
                 )}
             </div>
+
+            {/* Rentabilidad mensual — fila ancho completo */}
+            <MonthlyReturnsWidget data={monthlyReturns} />
+
+            {/* Ingresos y gastos del período — auditoría */}
+            <IncomeExpenseWidget incomesSummary={incomesSummary} expensesSummary={expensesSummary} />
+
+            {/* Exposición a derivados — solo renderiza si hay filas */}
+            <DerivativesExposureWidget exposures={derivativesExposures} />
 
             {/* Benchmark comparison */}
             {portfolioReturn && (
@@ -502,26 +521,31 @@ export default function Dashboard({ analytics, drawdown, portfolioReturn, sicavD
                 </div>
             )}
 
-            {/* Sector doughnut — secundario */}
-            <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                <h3 style={{ marginBottom: '0.35rem' }}>Distribución por Sector</h3>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                    <Info size={12} />
-                    La distribución sectorial puede ocultar correlaciones. Consulta la exposición por factor como referencia principal.
-                </p>
-                <div style={{ height: '280px', display: 'flex', justifyContent: 'center' }}>
-                    {sectorChartData && (
-                        <Doughnut
-                            data={sectorChartData}
-                            options={{
-                                plugins: {
-                                    legend: { position: isMobile ? 'bottom' : 'right', labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 12 } }
-                                },
-                                maintainAspectRatio: false,
-                            }}
-                        />
-                    )}
+            {/* Distribución sectorial + geográfica RV — misma fila si cabe */}
+            <div style={{ display: 'grid', gridTemplateColumns: hasGeoExposure ? 'repeat(auto-fit, minmax(320px, 1fr))' : '1fr', gap: '1.5rem' }}>
+                {/* Sector doughnut — secundario */}
+                <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                    <h3 style={{ marginBottom: '0.35rem' }}>Distribución por Sector</h3>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <Info size={12} />
+                        La distribución sectorial puede ocultar correlaciones. Consulta la exposición por factor como referencia principal.
+                    </p>
+                    <div style={{ height: '280px', display: 'flex', justifyContent: 'center' }}>
+                        {sectorChartData && (
+                            <Doughnut
+                                data={sectorChartData}
+                                options={{
+                                    plugins: {
+                                        legend: { position: isMobile ? 'bottom' : 'right', labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 12 } }
+                                    },
+                                    maintainAspectRatio: false,
+                                }}
+                            />
+                        )}
+                    </div>
                 </div>
+
+                {hasGeoExposure && <GeoExposureWidget geoExposure={geoExposure} />}
             </div>
         </div>
     );

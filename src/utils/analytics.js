@@ -1,3 +1,6 @@
+import { STOCK_CATALOG } from '../data/stockCatalog';
+import { toEur } from './fx';
+
 // Beta proxy por sector — estimaciones estándar de mercado
 // Nombres de sector tal como aparecen en stockCatalog.js
 const SECTOR_BETA = {
@@ -35,17 +38,22 @@ const INTERNATIONAL_TICKERS = new Set([
     'DB1', 'ALV', 'MUV2', 'IFX', 'ADS', 'BEI', 'CON',
 ]);
 
-// Tipos de cambio a EUR (alineados con informe Singular Bank 17/04/2026).
-// Convención: 1 unidad de la divisa listada equivale a FX_TO_EUR[divisa] euros.
-const FX_TO_EUR = {
-    EUR: 1,
-    USD: 0.8500,
-    CHF: 1.0873,
-    DKK: 0.1338,
-    GBP: 1.1489,
+// Clasificación geográfica para Renta Variable alineada con el informe Singular Bank
+// (Estados Unidos / Europa Zona no Euro / Zona Euro).
+const EUROZONE_COUNTRIES = new Set(['Eurozone', 'FR', 'DE', 'ES', 'IT', 'NL', 'BE', 'IE', 'PT', 'AT', 'FI']);
+const EUROPE_NON_EURO_COUNTRIES = new Set(['UK', 'CH', 'DK', 'NO', 'SE']);
+
+const classifyGeoGroup = (country) => {
+    if (country === 'US') return 'Estados Unidos';
+    if (EUROPE_NON_EURO_COUNTRIES.has(country)) return 'Europa Zona no Euro';
+    if (EUROZONE_COUNTRIES.has(country)) return 'Zona Euro';
+    return 'Otros';
 };
 
-const toEur = (amount, currency) => amount * (FX_TO_EUR[currency] ?? 1);
+// Lookup rápido ticker → country desde el catálogo (fallback cuando la op no incluye country)
+const TICKER_TO_COUNTRY = Object.fromEntries(
+    STOCK_CATALOG.map(s => [s.ticker, s.country])
+);
 
 // Retornos de referencia — datos mock actualizados a Q1 2026
 // En producción reemplazar por API (Yahoo Finance, MSCI)
@@ -88,15 +96,17 @@ export const calculateCostBasis = (operations) => {
 // Calcula distribución por clase de activo
 export const calculateAssetAllocation = (positions) => {
     const totalValue = positions.reduce((s, p) => s + p.value, 0);
-    if (totalValue === 0) return { equity: 0, bond: 0, cash: 0 };
+    if (totalValue === 0) return { equity: 0, bond: 0, cash: 0, other: 0 };
 
-    const groups = { equity: 0, bond: 0, cash: 0 };
+    const groups = { equity: 0, bond: 0, cash: 0, other: 0 };
     positions.forEach(p => {
         const type = p.asset_type ?? 'equity';
         if (type === 'bond' || type === 'bond_etf') {
             groups.bond += p.value;
         } else if (type === 'cash') {
             groups.cash += p.value;
+        } else if (type === 'accrual') {
+            groups.other += p.value;
         } else {
             groups.equity += p.value;
         }
@@ -106,6 +116,7 @@ export const calculateAssetAllocation = (positions) => {
         equity: (groups.equity / totalValue) * 100,
         bond: (groups.bond / totalValue) * 100,
         cash: (groups.cash / totalValue) * 100,
+        other: (groups.other / totalValue) * 100,
     };
 };
 
@@ -119,10 +130,22 @@ export const calculateFixedIncomeMetrics = (positions) => {
     const totalBondValue = bondPositions.reduce((s, p) => s + p.value, 0);
     if (totalBondValue === 0) return null;
 
-    // Duración del portfolio: suma ponderada de duraciones individuales
-    const portfolioDuration = bondPositions.reduce((s, p) => {
+    // Duración Macaulay: suma ponderada de duraciones individuales (referencia secundaria)
+    const portfolioMacaulayDuration = bondPositions.reduce((s, p) => {
         const w = p.value / totalBondValue;
         return s + w * (p.duration ?? 0);
+    }, 0);
+
+    // Duración modificada: Macaulay / (1 + YTM). Coincide con la métrica
+    // reportada por Singular Bank ("Duración de la cartera RF").
+    const portfolioDuration = bondPositions.reduce((s, p) => {
+        const w = p.value / totalBondValue;
+        const macaulay = p.duration ?? 0;
+        const ytm = p.ytm_at_purchase;
+        const modDuration = (ytm != null && ytm > -1)
+            ? macaulay / (1 + ytm)
+            : macaulay;
+        return s + w * modDuration;
     }, 0);
 
     // TIR media ponderada en compra
@@ -156,6 +179,7 @@ export const calculateFixedIncomeMetrics = (positions) => {
 
     return {
         portfolioDuration,
+        portfolioMacaulayDuration,
         weightedYTM,
         ratingDistribution,
         maturityDistribution,
@@ -173,11 +197,13 @@ export const calculatePortfolioMetrics = (holdings, marketData, costBasis) => {
 
         // ── LIQUIDEZ ──────────────────────────────────────────────────────────
         if (assetType === 'cash') {
+            // shares = saldo en divisa nativa; toEur lo normaliza a EUR para agregaciones
             const nominal = Number(h.shares);
+            const value = toEur(nominal, h.currency);
             return {
                 ...h,
                 currentPrice: 1.0,
-                value: nominal,
+                value,
                 avgCost: 1.0,
                 unrealizedPnL: 0,
                 unrealizedPnLPct: 0,
@@ -187,6 +213,30 @@ export const calculatePortfolioMetrics = (holdings, marketData, costBasis) => {
                 annualYield: 0,
                 annualIncome: 0,
                 factor: 'cash',
+                isInternational: h.currency !== 'EUR',
+                weight: 0,
+                riskContribution: 0,
+                contributionToReturn: 0,
+            };
+        }
+
+        // ── DEUDORES/ACREEDORES (accruals, línea "Otros conceptos" del informe) ───
+        if (assetType === 'accrual') {
+            // shares puede ser negativo (acreedores netos): el signo viene de buy/sell agregado
+            const value = toEur(Number(h.shares), h.currency);
+            return {
+                ...h,
+                currentPrice: 1.0,
+                value,
+                avgCost: 1.0,
+                unrealizedPnL: 0,
+                unrealizedPnLPct: 0,
+                dailyChange: 0,
+                dailyChangePct: 0,
+                beta: 0,
+                annualYield: 0,
+                annualIncome: 0,
+                factor: 'other',
                 isInternational: false,
                 weight: 0,
                 riskContribution: 0,
@@ -242,8 +292,12 @@ export const calculatePortfolioMetrics = (holdings, marketData, costBasis) => {
         const beta = assetType === 'bond_etf' ? 0.3 : estimateBeta(h.ticker, h.sector);
         const annualYield = data.yield ?? 0;
         const annualIncome = (annualYield / 100) * value;
+        // Enriquecer country desde el catálogo si no vino en la op
+        const country = h.country ?? TICKER_TO_COUNTRY[h.ticker] ?? null;
+
         return {
             ...h,
+            country,
             currentPrice,
             value,
             avgCost,
@@ -280,6 +334,28 @@ export const calculatePortfolioMetrics = (holdings, marketData, costBasis) => {
         const ccy = p.currency ?? 'USD';
         currencyExposure[ccy] = (currencyExposure[ccy] ?? 0) + p.weight;
     });
+
+    // Distribución geográfica de la RV (sólo equity, para coincidir con el informe Singular Bank)
+    const equityValueForGeo = positions
+        .filter(p => (p.asset_type ?? 'equity') === 'equity')
+        .reduce((s, p) => s + p.value, 0);
+
+    const geoExposureValues = {};
+    positions
+        .filter(p => (p.asset_type ?? 'equity') === 'equity')
+        .forEach(p => {
+            // Jerarquía: country del holding → catálogo → 'Unknown'
+            const country = p.country ?? TICKER_TO_COUNTRY[p.ticker] ?? 'Unknown';
+            const group = classifyGeoGroup(country);
+            geoExposureValues[group] = (geoExposureValues[group] ?? 0) + p.value;
+        });
+
+    const geoExposure = {};
+    if (equityValueForGeo > 0) {
+        Object.entries(geoExposureValues).forEach(([group, value]) => {
+            geoExposure[group] = (value / equityValueForGeo) * 100;
+        });
+    }
 
     const sortedByWeight = [...positions].sort((a, b) => b.weight - a.weight);
     const top3Weight = sortedByWeight.slice(0, 3).reduce((s, p) => s + p.weight, 0);
@@ -330,6 +406,7 @@ export const calculatePortfolioMetrics = (holdings, marketData, costBasis) => {
         healthScore,
         assetAllocation,
         fixedIncomeMetrics,
+        geoExposure,
     };
 };
 

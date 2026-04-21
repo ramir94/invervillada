@@ -1,6 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
-import { LayoutDashboard, PieChart, BrainCircuit, ShieldAlert, TrendingUp, LogOut, ArrowLeftRight, AlertTriangle } from 'lucide-react'
-import Dashboard from './Dashboard'
+import { LayoutDashboard, PieChart, BrainCircuit, ShieldAlert, TrendingUp, LogOut, ArrowLeftRight, AlertTriangle, LineChart, Shield, Landmark, Receipt } from 'lucide-react'
+import OverviewTab from './OverviewTab'
+import PerformanceTab from './PerformanceTab'
+import RiskTab from './RiskTab'
+import FixedIncomeTab from './FixedIncomeTab'
+import IncomeAuditTab from './IncomeAuditTab'
 import PortfolioTable from './PortfolioTable'
 import AIAnalysis from './AIAnalysis'
 import Simulator from './Simulator'
@@ -16,12 +20,20 @@ import { getExpensesSummary } from '../../services/expenses'
 import { getLatestDerivativesExposure } from '../../services/derivatives'
 import { useAuth } from '../../contexts/AuthContext'
 
+// Items principales (siempre en sidebar desktop). `showInMobileNav` filtra la bottom nav
+// para no saturar la pantalla móvil (máx 5 items visibles). Las sub-secciones
+// analíticas (Performance, Risk, Renta Fija, Ingresos) quedan accesibles desde
+// Overview en móvil y desde el sidebar completo en desktop.
 const navItems = [
-    { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
-    { id: 'portfolio', label: 'Holdings', icon: PieChart },
-    { id: 'operations', label: 'Operaciones', icon: ArrowLeftRight },
-    { id: 'analysis', label: 'AI Analyst', icon: BrainCircuit },
-    { id: 'simulator', label: 'Stress Test', icon: ShieldAlert },
+    { id: 'dashboard',   label: 'Overview',     icon: LayoutDashboard,  showInMobileNav: true  },
+    { id: 'performance', label: 'Performance',  icon: LineChart,        showInMobileNav: false },
+    { id: 'risk',        label: 'Risk',         icon: Shield,           showInMobileNav: false },
+    { id: 'fixedIncome', label: 'Renta Fija',   icon: Landmark,         showInMobileNav: false },
+    { id: 'incomeAudit', label: 'Ingresos',     icon: Receipt,          showInMobileNav: false },
+    { id: 'portfolio',   label: 'Holdings',     icon: PieChart,         showInMobileNav: true  },
+    { id: 'operations',  label: 'Operaciones',  icon: ArrowLeftRight,   showInMobileNav: true  },
+    { id: 'analysis',    label: 'AI Analyst',   icon: BrainCircuit,     showInMobileNav: true  },
+    { id: 'simulator',   label: 'Stress Test',  icon: ShieldAlert,      showInMobileNav: true  },
 ]
 
 // Ticker de la propia SICAV en BME (Bolsa de Madrid)
@@ -160,9 +172,9 @@ export default function DashboardApp() {
 
     return (
         <div className="app-container">
-            {/* Bottom nav — mobile only */}
+            {/* Bottom nav — mobile only (limitada a los items marcados con showInMobileNav) */}
             <nav className="bottom-nav">
-                {navItems.map(item => (
+                {navItems.filter(item => item.showInMobileNav).map(item => (
                     <button
                         key={item.id}
                         className={`bottom-nav-item${activeTab === item.id ? ' active' : ''}`}
@@ -296,7 +308,35 @@ export default function DashboardApp() {
             </aside>
 
             <main className="main-content">
-                {activeTab === 'dashboard' && <Dashboard analytics={analytics} drawdown={drawdown} portfolioReturn={portfolioReturn} sicavData={marketData?.[SICAV_TICKER] ?? null} sicavInfo={sicavInfo} snapshotCount={snapshots.length} monthlyReturns={monthlyReturns} incomesSummary={incomesSummary} expensesSummary={expensesSummary} derivativesExposures={derivativesExposures} />}
+                {activeTab === 'dashboard' && (
+                    <OverviewTab
+                        analytics={analytics}
+                        drawdown={drawdown}
+                        portfolioReturn={portfolioReturn}
+                        sicavData={marketData?.[SICAV_TICKER] ?? null}
+                        sicavInfo={sicavInfo}
+                        snapshotCount={snapshots.length}
+                    />
+                )}
+                {activeTab === 'performance' && (
+                    <PerformanceTab
+                        analytics={analytics}
+                        drawdown={drawdown}
+                        portfolioReturn={portfolioReturn}
+                        sicavData={marketData?.[SICAV_TICKER] ?? null}
+                        monthlyReturns={monthlyReturns}
+                        snapshotCount={snapshots.length}
+                    />
+                )}
+                {activeTab === 'risk' && <RiskTab analytics={analytics} />}
+                {activeTab === 'fixedIncome' && <FixedIncomeTab analytics={analytics} />}
+                {activeTab === 'incomeAudit' && (
+                    <IncomeAuditTab
+                        incomesSummary={incomesSummary}
+                        expensesSummary={expensesSummary}
+                        derivativesExposures={derivativesExposures}
+                    />
+                )}
                 {activeTab === 'portfolio' && <PortfolioTable analytics={analytics} />}
                 {activeTab === 'operations' && (
                     <Operations

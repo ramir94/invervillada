@@ -73,6 +73,10 @@ export default function MonthlyReturnsWidget({ data }) {
                                 tick={{ fill: '#94a3b8', fontSize: 11 }}
                                 axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
                                 tickLine={false}
+                                angle={-35}
+                                textAnchor="end"
+                                height={55}
+                                interval="preserveStartEnd"
                             />
                             <YAxis
                                 tick={{ fill: '#94a3b8', fontSize: 11 }}

@@ -1,12 +1,15 @@
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import { Doughnut } from 'react-chartjs-2';
 import { Landmark } from 'lucide-react';
-import { RATING_COLORS, MATURITY_COLORS, getDoughnutOptions } from './dashboardHelpers';
+import { RATING_COLORS, MATURITY_COLORS, useResponsiveDoughnutOptions } from './dashboardHelpers';
 import FixedIncomeTable from './FixedIncomeTable';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
 export default function FixedIncomeTab({ analytics }) {
+    // Hook responsive — debe llamarse antes de cualquier early return
+    const doughnutOptions = useResponsiveDoughnutOptions();
+
     if (!analytics) {
         return (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px', color: 'var(--text-secondary)' }}>
@@ -59,8 +62,6 @@ export default function FixedIncomeTab({ analytics }) {
             }],
         };
     })() : null;
-
-    const doughnutOptions = getDoughnutOptions();
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>

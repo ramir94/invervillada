@@ -40,12 +40,20 @@ const PercentValue = ({ value, withSign = true }) => {
 }
 
 // Celda individual del grid de métricas
+// minWidth:0 permite que el contenido se trunque correctamente en grids con auto-fit
 const MetricCell = ({ label, children }) => (
-    <div>
+    <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
             {label}
         </div>
-        <div style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)' }}>
+        <div style={{
+            fontSize: '1.15rem',
+            fontWeight: '700',
+            color: 'var(--text-primary)',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '0.35rem',
+        }}>
             {children}
         </div>
     </div>
@@ -114,6 +122,8 @@ export default function SicavInfoWidget({ sicavInfo }) {
                         borderRadius: '6px',
                         color: 'var(--success)',
                         fontSize: '0.95rem',
+                        whiteSpace: 'nowrap',
+                        maxWidth: '100%',
                     }}>
                         <ArrowUpRight size={14} />
                         {subscriptions_ytd != null ? formatCurrency(Number(subscriptions_ytd)) : '—'}
@@ -131,6 +141,8 @@ export default function SicavInfoWidget({ sicavInfo }) {
                         borderRadius: '6px',
                         color: 'var(--danger)',
                         fontSize: '0.95rem',
+                        whiteSpace: 'nowrap',
+                        maxWidth: '100%',
                     }}>
                         <ArrowDownRight size={14} />
                         {redemptions_ytd != null ? formatCurrency(Number(redemptions_ytd)) : '—'}

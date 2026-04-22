@@ -109,7 +109,7 @@ export default function FixedIncomeTable({ analytics }) {
             </div>
 
             <div className="glass-panel table-container">
-                <table>
+                <table style={{ minWidth: '1100px' }}>
                     <thead>
                         <tr>
                             <th>Nombre / Emisor</th>

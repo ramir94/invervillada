@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { LayoutDashboard, BrainCircuit, ShieldAlert, TrendingUp, LogOut, ArrowLeftRight, AlertTriangle, LineChart, Shield, Landmark, Receipt, BarChart3 } from 'lucide-react'
+import { LayoutDashboard, BrainCircuit, ShieldAlert, TrendingUp, LogOut, ArrowLeftRight, AlertTriangle, LineChart, Shield, Landmark, Receipt, BarChart3, MoreHorizontal } from 'lucide-react'
 import OverviewTab from './OverviewTab'
 import PerformanceTab from './PerformanceTab'
 import RiskTab from './RiskTab'
@@ -9,6 +9,7 @@ import IncomeAuditTab from './IncomeAuditTab'
 import AIAnalysis from './AIAnalysis'
 import Simulator from './Simulator'
 import Operations from './Operations'
+import MobileMoreDrawer from './MobileMoreDrawer'
 import { getMarketData } from '../../services/marketData'
 import { getOperations, buildHoldingsFromOperations, redeemMaturedBonds } from '../../services/operations'
 import { calculateCostBasis, calculatePortfolioMetrics, calculateDrawdown, calculatePortfolioReturn } from '../../utils/analytics'
@@ -41,6 +42,7 @@ const SICAV_TICKER = '0P00011NA7'
 export default function DashboardApp() {
     const { session, signOut } = useAuth()
     const [activeTab, setActiveTab] = useState('dashboard')
+    const [moreDrawerOpen, setMoreDrawerOpen] = useState(false)
     const [marketData, setMarketData] = useState(null)
     const [operations, setOperations] = useState([])
     const [snapshots, setSnapshots] = useState([])
@@ -169,11 +171,17 @@ export default function DashboardApp() {
         )
     }
 
+    // Items del bottom nav + "Más" fijo al final que abre el drawer con el resto
+    const mobileNavItems = navItems.filter(item => item.showInMobileNav)
+    const moreItems = navItems.filter(item => !item.showInMobileNav)
+    // Indicador si la sección activa vive dentro del drawer (para resaltar "Más")
+    const moreIsActive = moreItems.some(item => item.id === activeTab)
+
     return (
         <div className="app-container">
             {/* Bottom nav — mobile only (limitada a los items marcados con showInMobileNav) */}
             <nav className="bottom-nav">
-                {navItems.filter(item => item.showInMobileNav).map(item => (
+                {mobileNavItems.map(item => (
                     <button
                         key={item.id}
                         className={`bottom-nav-item${activeTab === item.id ? ' active' : ''}`}
@@ -193,7 +201,33 @@ export default function DashboardApp() {
                         )}
                     </button>
                 ))}
+                {/* Botón "Más" — abre overlay con el resto de secciones + sesión */}
+                <button
+                    key="more"
+                    className={`bottom-nav-item${moreIsActive ? ' active' : ''}`}
+                    onClick={() => setMoreDrawerOpen(true)}
+                    aria-label="Más opciones"
+                    style={{ position: 'relative' }}
+                >
+                    <MoreHorizontal size={22} />
+                    <span>Más</span>
+                </button>
             </nav>
+
+            {/* Drawer móvil con secciones ocultas + sesión */}
+            <MobileMoreDrawer
+                open={moreDrawerOpen}
+                onClose={() => setMoreDrawerOpen(false)}
+                items={moreItems}
+                activeTab={activeTab}
+                onSelect={setActiveTab}
+                userEmail={session?.user?.email}
+                onSignOut={signOut}
+                holdingsCount={holdings.length}
+                healthScore={analytics?.healthScore?.score ?? null}
+                totalAlertCount={totalAlertCount}
+                highAlertCount={highAlertCount}
+            />
 
             <aside className="sidebar glass-panel" style={{ borderRadius: 0, borderTop: 0, borderBottom: 0, height: '100vh', position: 'sticky', top: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem' }}>

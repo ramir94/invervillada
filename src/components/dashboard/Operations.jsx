@@ -307,7 +307,7 @@ export default function Operations({ operations, analytics, onOperationAdded, on
 
     return (
         <div>
-            <header style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <header style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem' }}>
                 <div>
                     <h2>Operaciones</h2>
                     <p style={{ color: 'var(--text-secondary)', margin: '0.25rem 0 0' }}>
@@ -732,7 +732,7 @@ export default function Operations({ operations, analytics, onOperationAdded, on
                             }}>{error}</div>
                         )}
 
-                        <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+                        <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
                             <button type="submit" className="btn" disabled={loading || !isFormReady}>
                                 {loading ? 'Guardando...' : 'Guardar operación'}
                             </button>

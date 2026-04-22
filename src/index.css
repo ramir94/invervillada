@@ -172,6 +172,34 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
   }
+
+  /* Touch targets mínimos 40px para botones y controles icono (mejor UX táctil) */
+  button,
+  .icon-button {
+    min-height: 40px;
+  }
+
+  /* Permitir wrap en celdas de nombre largo (Ticker/Nombre) para que no bloqueen scroll */
+  table td:first-child,
+  table th:first-child {
+    white-space: normal;
+  }
+
+  /* Tipografía ligeramente más compacta en móvil */
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.25rem; }
+  h3 { font-size: 1rem; }
+}
+
+/* Breakpoint fino para teléfonos estrechos (<420px) */
+@media (max-width: 420px) {
+  .glass-panel {
+    padding: 1rem !important;
+  }
+
+  .dashboard-grid {
+    gap: 0.75rem;
+  }
 }
 
 /* Typography */

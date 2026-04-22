@@ -404,11 +404,11 @@ export default function AIAnalysis({ analytics }) {
                             Principales posiciones (% sobre patrimonio total)
                         </div>
                         {topEquity.map((p, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.45rem' }}>
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.45rem', flexWrap: 'wrap' }}>
                                 <div style={{ width: '40px', fontSize: '0.77rem', color: 'var(--text-secondary)', textAlign: 'right', flexShrink: 0 }}>
                                     {p.weight.toFixed(1)}%
                                 </div>
-                                <div style={{ flex: 1, height: '7px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', overflow: 'hidden' }}>
+                                <div style={{ flex: 1, minWidth: '80px', height: '7px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', overflow: 'hidden' }}>
                                     <div style={{
                                         width: `${(p.weight / maxEquityWeight) * 100}%`,
                                         height: '100%',
@@ -418,7 +418,7 @@ export default function AIAnalysis({ analytics }) {
                                         transition: 'width 0.4s ease',
                                     }} />
                                 </div>
-                                <div style={{ fontSize: '0.85rem', color: '#e2e8f0', minWidth: '130px', flexShrink: 0 }}>
+                                <div style={{ fontSize: '0.85rem', color: '#e2e8f0', flexBasis: '130px', flexShrink: 1, flexGrow: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                     {p.name ?? p.ticker}
                                 </div>
                                 <div style={{ fontSize: '0.8rem', color: p.unrealizedPnLPct >= 0 ? 'var(--success)' : 'var(--danger)', minWidth: '56px', textAlign: 'right', fontWeight: '600', flexShrink: 0 }}>

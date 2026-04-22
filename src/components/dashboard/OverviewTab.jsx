@@ -183,8 +183,8 @@ export default function OverviewTab({ analytics, drawdown, portfolioReturn, sica
                 )}
             </div>
 
-            {/* Drawdown Tracker + SICAV NAV — misma fila */}
-            <div style={{ display: 'grid', gridTemplateColumns: drawdown && sicavData?.price > 0 ? '1fr auto' : '1fr', gap: '1.5rem', alignItems: 'stretch' }}>
+            {/* Drawdown Tracker + SICAV NAV — misma fila en desktop, apilados en móvil */}
+            <div style={{ display: 'grid', gridTemplateColumns: drawdown && sicavData?.price > 0 ? 'repeat(auto-fit, minmax(280px, 1fr))' : '1fr', gap: '1.5rem', alignItems: 'stretch' }}>
                 {drawdown && (
                     <DrawdownWidget drawdown={drawdown} totalValue={totalValue} snapshotCount={snapshotCount} />
                 )}

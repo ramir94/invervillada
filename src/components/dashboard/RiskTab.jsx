@@ -3,11 +3,14 @@ import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import { Doughnut } from 'react-chartjs-2';
 import { AlertTriangle, Target, Info, Globe, Landmark } from 'lucide-react';
 import GeoExposureWidget from './GeoExposureWidget';
-import { FACTOR_LABELS, FACTOR_COLORS, CURRENCY_COLORS, getDoughnutOptions } from './dashboardHelpers';
+import { FACTOR_LABELS, FACTOR_COLORS, CURRENCY_COLORS, useResponsiveDoughnutOptions } from './dashboardHelpers';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
 export default function RiskTab({ analytics }) {
+    // Hook responsive — debe llamarse antes de cualquier early return
+    const doughnutOptions = useResponsiveDoughnutOptions();
+
     const sectorChartData = useMemo(() => {
         if (!analytics) return null;
         const sectorMap = {};
@@ -50,7 +53,6 @@ export default function RiskTab({ analytics }) {
         return { labels, datasets: [{ data, backgroundColor: colors, borderColor: '#1e293b', borderWidth: 2 }] };
     })() : null;
 
-    const doughnutOptions = getDoughnutOptions();
     const medAlerts = alerts.filter(a => a.severity === 'medium');
 
     return (

@@ -75,7 +75,7 @@ export default function EquityTable({ analytics }) {
             </div>
 
             <div className="glass-panel table-container">
-                <table>
+                <table style={{ minWidth: '900px' }}>
                     <thead>
                         <tr>
                             <th>Ticker</th>

@@ -1,3 +1,4 @@
+import { Fragment, useEffect, useState } from 'react';
 import { formatCurrency } from '../../utils/formatting';
 import { BENCHMARK_RETURNS } from '../../utils/analytics';
 import { TrendingUp, TrendingDown, Info, BarChart2, Landmark } from 'lucide-react';
@@ -42,9 +43,21 @@ export const CURRENCY_COLORS = {
     GBp: '#f472b6',
 };
 
-// Devuelve las opciones base del doughnut según si el viewport es móvil
-export function getDoughnutOptions() {
-    const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+// Hook que devuelve las opciones del doughnut recalculadas al cambiar el viewport.
+// Usa un listener de `resize` para actualizar la posición de la leyenda (bottom en móvil,
+// right en desktop) sin requerir un reload.
+export function useResponsiveDoughnutOptions() {
+    const getIsMobile = () => typeof window !== 'undefined' && window.innerWidth <= 768;
+    const [isMobile, setIsMobile] = useState(getIsMobile);
+
+    useEffect(() => {
+        const handleResize = () => setIsMobile(getIsMobile());
+        window.addEventListener('resize', handleResize);
+        // Sincronizar por si el estado inicial (SSR) difiere del actual
+        handleResize();
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
     return {
         plugins: {
             legend: {
@@ -191,17 +204,17 @@ export function BenchmarkWidget({ portfolioReturn }) {
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textAlign: 'right', fontWeight: '600' }}>1 Año</div>
                 {/* Filas */}
                 {rows.map(row => (
-                    <>
-                        <div key={`${row.label}-label`} style={{
+                    <Fragment key={row.label}>
+                        <div style={{
                             fontSize: '0.85rem',
                             fontWeight: row.isPortfolio ? '700' : '400',
                             color: row.isPortfolio ? 'var(--accent-color)' : 'var(--text-secondary)',
                         }}>
                             {row.label}
                         </div>
-                        <ReturnCell key={`${row.label}-ytd`} value={row.ytd} isPortfolio={row.isPortfolio} />
-                        <ReturnCell key={`${row.label}-1y`} value={row['1y']} isPortfolio={row.isPortfolio} />
-                    </>
+                        <ReturnCell value={row.ytd} isPortfolio={row.isPortfolio} />
+                        <ReturnCell value={row['1y']} isPortfolio={row.isPortfolio} />
+                    </Fragment>
                 ))}
             </div>
             {!hasAnyData && (
@@ -259,7 +272,6 @@ export function SicavNavBar({ data }) {
             flexDirection: 'column',
             justifyContent: 'center',
             gap: '0.75rem',
-            minWidth: '200px',
         }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Landmark size={16} color="var(--accent-color)" />
